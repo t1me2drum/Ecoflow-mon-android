@@ -38,6 +38,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.powerhub.PowerHubApp
 import app.powerhub.data.DeveloperKeys
+import app.powerhub.data.ThemeMode
+import androidx.compose.material3.FilterChip
 import app.powerhub.data.SyncResult
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -62,6 +64,7 @@ fun SettingsScreen(onBack: () -> Unit, onLoggedOut: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             ConnectionBanner(conn)
+            ThemeCard()
             DeveloperKeysCard()
             HiddenStationsCard()
             Card {
@@ -226,6 +229,22 @@ private fun HiddenStationsCard() {
                     TextButton(onClick = { scope.launch { runCatching { repo.restoreStation(sn) } } }) {
                         Text("Повернути")
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeCard() {
+    val settings = PowerHubApp.repo.settings
+    val mode by settings.theme.collectAsStateWithLifecycle()
+    Card {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Тема", style = MaterialTheme.typography.titleSmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ThemeMode.entries.forEach { m ->
+                    FilterChip(selected = mode == m, onClick = { settings.setTheme(m) }, label = { Text(m.title) })
                 }
             }
         }

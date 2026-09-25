@@ -1,6 +1,18 @@
 package app.powerhub.ui
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -36,14 +48,33 @@ fun minutes(m: Int?): String {
     return if (h > 0) "$h год $mm хв" else "$mm хв"
 }
 
+/**
+ * Battery ring. When [charging] (station on grid power) a bright segment runs along the filled
+ * arc and a bolt pulses above the percentage; at 100% only the bolt stays.
+ */
 @Composable
-fun SocRing(soc: Int?, online: Boolean, size: Dp, stroke: Dp = 12.dp) {
+fun SocRing(soc: Int?, online: Boolean, size: Dp, stroke: Dp = 12.dp, charging: Boolean = false) {
     val track = MaterialTheme.colorScheme.surfaceVariant
     val color = when {
         !online -> MaterialTheme.colorScheme.outline
         (soc ?: 0) <= 20 -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.primary
     }
+    val animate = charging && online && soc != null
+    val transition = rememberInfiniteTransition(label = "charging")
+    val sweep by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1800, easing = LinearEasing), RepeatMode.Restart),
+        label = "sweep",
+    )
+    val pulse by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "pulse",
+    )
+
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(size)) {
             val s = Stroke(stroke.toPx(), cap = StrokeCap.Round)
@@ -51,9 +82,32 @@ fun SocRing(soc: Int?, online: Boolean, size: Dp, stroke: Dp = 12.dp) {
             val arcSize = androidx.compose.ui.geometry.Size(this.size.width - inset * 2, this.size.height - inset * 2)
             val topLeft = androidx.compose.ui.geometry.Offset(inset, inset)
             drawArc(track, 135f, 270f, false, topLeft, arcSize, style = s)
-            if (soc != null) drawArc(color, 135f, 270f * soc.coerceIn(0, 100) / 100f, false, topLeft, arcSize, style = s)
+            if (soc != null) {
+                val filled = 270f * soc.coerceIn(0, 100) / 100f
+                drawArc(color, 135f, filled, false, topLeft, arcSize, style = s)
+                if (animate && soc < 100 && filled > 0f) {
+                    // A short highlight travelling from the empty end towards the current level.
+                    val len = minOf(40f, filled)
+                    val head = (filled + len) * sweep
+                    val from = (head - len).coerceAtLeast(0f)
+                    val to = head.coerceAtMost(filled)
+                    if (to > from) {
+                        drawArc(
+                            Color.White.copy(alpha = 0.55f), 135f + from, to - from, false, topLeft, arcSize,
+                            style = s,
+                        )
+                    }
+                }
+            }
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            if (animate) {
+                Icon(
+                    Icons.Default.Bolt, "Заряджається",
+                    Modifier.size(size * 0.2f).alpha(if (soc!! < 100) pulse else 1f),
+                    tint = color,
+                )
+            }
             Text(
                 soc?.let { "$it%" } ?: "—",
                 fontSize = (size.value / 4.2f).sp,

@@ -59,6 +59,8 @@ class CredentialStore(context: Context) {
 
 data class SyncResult(val added: Int, val updated: Int, val removed: Int, val unsupported: List<String> = emptyList())
 
+enum class ThemeMode(val title: String) { DARK("Темна"), LIGHT("Світла"), SYSTEM("Як у системі") }
+
 data class AlertSettings(
     val lowBattery: Boolean = true,
     val lowBatteryPercent: Int = 20,
@@ -185,6 +187,16 @@ class SettingsStore(context: Context) {
             .putBoolean("alert_offline", a.offline)
             .apply()
         _alerts.value = a
+    }
+
+    private val _theme = MutableStateFlow(
+        runCatching { ThemeMode.valueOf(prefs.getString("theme", null) ?: "DARK") }.getOrDefault(ThemeMode.DARK),
+    )
+    val theme: StateFlow<ThemeMode> = _theme.asStateFlow()
+
+    fun setTheme(mode: ThemeMode) {
+        prefs.edit().putString("theme", mode.name).apply()
+        _theme.value = mode
     }
 
     /** Last known summary for the home-screen widget, survives process death. */

@@ -125,7 +125,7 @@ private fun Overview(device: Device, s: DeviceState, online: Boolean) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            SocRing(s.soc, online, 200.dp)
+            SocRing(s.soc, online, 200.dp, charging = s.gridConnected == true)
         }
         val charging = (s.inputW ?: 0) > (s.outputW ?: 0)
         val remainText = when {

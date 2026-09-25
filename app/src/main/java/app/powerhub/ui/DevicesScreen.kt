@@ -107,8 +107,10 @@ fun DevicesScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
 
     Scaffold(
         topBar = {
+            // 48dp instead of 64dp lifts the list by roughly one capital-letter height.
             TopAppBar(
                 title = { Text("Мої станції") },
+                expandedHeight = 48.dp,
                 actions = {
                     if (repo.hasDeveloperKeys) {
                         IconButton(onClick = { sync() }, enabled = !syncing) {
@@ -224,16 +226,18 @@ private fun DeviceCard(
             elevation = CardDefaults.cardElevation(defaultElevation = elevation),
         ) {
             Row(Modifier.padding(start = 12.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                SocRing(state.soc, online, 56.dp, 6.dp)
+                SocRing(state.soc, online, 56.dp, 6.dp, charging = state.gridConnected == true)
                 Column(Modifier.padding(start = 12.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row {
                         Text(
                             d.name, style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false).alignByBaseline(),
                         )
                         Text(
                             "  ${d.model.title}", style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                            modifier = Modifier.alignByBaseline(),
                         )
                     }
                     val status = when {
