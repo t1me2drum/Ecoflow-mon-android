@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
@@ -29,6 +30,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -36,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +50,7 @@ import app.powerhub.PowerHubApp
 import app.powerhub.data.DeviceSnapshot
 import app.powerhub.protocol.Device
 import app.powerhub.protocol.DeviceModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,14 +62,40 @@ fun DevicesScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
     var adding by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<Device?>(null) }
     var removing by remember { mutableStateOf<Device?>(null) }
+    var syncing by remember { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    fun sync() {
+        if (syncing) return
+        syncing = true
+        scope.launch {
+            val text = try {
+                describeSync(repo.syncStations())
+            } catch (e: Exception) {
+                "Не вдалося оновити список: ${e.message}"
+            } finally {
+                syncing = false
+            }
+            snackbar.showSnackbar(text)
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Мої станції") },
-                actions = { IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "Налаштування") } },
+                actions = {
+                    if (repo.hasDeveloperKeys) {
+                        IconButton(onClick = { sync() }, enabled = !syncing) {
+                            Icon(Icons.Default.Sync, "Оновити список станцій")
+                        }
+                    }
+                    IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "Налаштування") }
+                },
             )
         },
+        snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
             FloatingActionButton(onClick = { adding = true }) { Icon(Icons.Default.Add, "Додати") }
         },
@@ -75,8 +106,8 @@ fun DevicesScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
                 Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center) {
                     Text("Станцій ще немає", style = MaterialTheme.typography.titleLarge)
                     Text(
-                        "Натисніть «+» і введіть серійний номер. Його видно в офіційному застосунку " +
-                            "(Налаштування пристрою → Про пристрій) або на наклейці станції.",
+                        "Додайте ключі Developer API в налаштуваннях, щоб підтягнути всі станції акаунта, " +
+                            "або натисніть «+» і введіть серійний номер вручну.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

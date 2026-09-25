@@ -19,6 +19,8 @@ val API_HOSTS = listOf(
 
 data class Credentials(val email: String, val password: String, val apiHost: String)
 
+data class DeveloperKeys(val accessKey: String, val secretKey: String)
+
 /** EcoFlow account credentials, encrypted with a key held in the Android Keystore. */
 class CredentialStore(context: Context) {
     private val prefs = EncryptedSharedPreferences.create(
@@ -39,8 +41,23 @@ class CredentialStore(context: Context) {
         prefs.edit().putString("email", c.email).putString("password", c.password).putString("host", c.apiHost).apply()
     }
 
+    fun loadKeys(): DeveloperKeys? {
+        val ak = prefs.getString("open_ak", null) ?: return null
+        val sk = prefs.getString("open_sk", null) ?: return null
+        return DeveloperKeys(ak, sk)
+    }
+
+    fun saveKeys(k: DeveloperKeys?) {
+        val e = prefs.edit()
+        if (k == null) e.remove("open_ak").remove("open_sk")
+        else e.putString("open_ak", k.accessKey).putString("open_sk", k.secretKey)
+        e.apply()
+    }
+
     fun clear() = prefs.edit().clear().apply()
 }
+
+data class SyncResult(val added: Int, val updated: Int, val removed: Int, val unsupported: List<String> = emptyList())
 
 data class AlertSettings(
     val lowBattery: Boolean = true,
@@ -64,13 +81,21 @@ class SettingsStore(context: Context) {
         return (0 until arr.length()).mapNotNull { i ->
             val o = arr.getJSONObject(i)
             val model = runCatching { DeviceModel.valueOf(o.getString("model")) }.getOrNull() ?: return@mapNotNull null
-            Device(o.getString("sn"), o.optString("name", o.getString("sn")), model)
+            Device(
+                o.getString("sn"), o.optString("name", o.getString("sn")), model,
+                imported = o.optBoolean("imported"), customName = o.optBoolean("customName"),
+            )
         }
     }
 
     private fun writeDevices(list: List<Device>) {
         val arr = JSONArray()
-        list.forEach { arr.put(JSONObject().put("sn", it.sn).put("name", it.name).put("model", it.model.name)) }
+        list.forEach {
+            arr.put(
+                JSONObject().put("sn", it.sn).put("name", it.name).put("model", it.model.name)
+                    .put("imported", it.imported).put("customName", it.customName),
+            )
+        }
         prefs.edit().putString("devices", arr.toString()).apply()
         _devices.value = list
     }
@@ -80,7 +105,35 @@ class SettingsStore(context: Context) {
     fun removeDevice(sn: String) = writeDevices(_devices.value.filterNot { it.sn == sn })
 
     fun renameDevice(sn: String, name: String) =
-        writeDevices(_devices.value.map { if (it.sn == sn) it.copy(name = name) else it })
+        writeDevices(_devices.value.map { if (it.sn == sn) it.copy(name = name, customName = true) else it })
+
+    /** Applies the account's station list; manually added stations are never touched. */
+    fun applyCloudList(cloud: List<Device>): SyncResult {
+        val current = _devices.value
+        val bySn = cloud.associateBy { it.sn }
+        var updated = 0
+        var removed = 0
+        val kept = current.mapNotNull { d ->
+            val c = bySn[d.sn]
+            when {
+                c == null && d.imported -> { removed++; null }
+                c == null -> d
+                else -> {
+                    val next = d.copy(
+                        name = if (d.customName) d.name else c.name,
+                        model = c.model,
+                        imported = true,
+                    )
+                    if (next != d) updated++
+                    next
+                }
+            }
+        }
+        val known = current.map { it.sn }.toSet()
+        val added = cloud.filter { it.sn !in known }
+        writeDevices(kept + added)
+        return SyncResult(added.size, updated, removed)
+    }
 
     private fun readAlerts() = AlertSettings(
         lowBattery = prefs.getBoolean("alert_low", true),

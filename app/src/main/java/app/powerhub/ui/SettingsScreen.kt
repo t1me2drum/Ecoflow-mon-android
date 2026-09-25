@@ -5,28 +5,41 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.powerhub.PowerHubApp
+import app.powerhub.data.DeveloperKeys
+import app.powerhub.data.SyncResult
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,6 +62,7 @@ fun SettingsScreen(onBack: () -> Unit, onLoggedOut: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             ConnectionBanner(conn)
+            DeveloperKeysCard()
             Card {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Сповіщення", style = MaterialTheme.typography.titleSmall)
@@ -104,5 +118,86 @@ private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f))
         Switch(checked, onChange)
+    }
+}
+
+@Composable
+private fun DeveloperKeysCard() {
+    val repo = PowerHubApp.repo
+    val scope = rememberCoroutineScope()
+    val saved = remember { repo.developerKeys() }
+    var accessKey by remember { mutableStateOf(saved?.accessKey.orEmpty()) }
+    var secretKey by remember { mutableStateOf(saved?.secretKey.orEmpty()) }
+    var hasKeys by remember { mutableStateOf(saved != null) }
+    var busy by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var isError by remember { mutableStateOf(false) }
+
+    Card {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Список станцій з акаунта", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Ключі з developer.ecoflow.com. З ними станції підтягуються автоматично й однаково на всіх телефонах.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedTextField(
+                accessKey, { accessKey = it.trim() }, Modifier.fillMaxWidth(),
+                label = { Text("Access Key") }, singleLine = true,
+            )
+            OutlinedTextField(
+                secretKey, { secretKey = it.trim() }, Modifier.fillMaxWidth(),
+                label = { Text("Secret Key") }, singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+            )
+            message?.let {
+                Text(
+                    it, style = MaterialTheme.typography.bodySmall,
+                    color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    enabled = !busy && accessKey.isNotBlank() && secretKey.isNotBlank(),
+                    onClick = {
+                        busy = true
+                        message = null
+                        scope.launch {
+                            try {
+                                val r = repo.saveDeveloperKeys(DeveloperKeys(accessKey, secretKey))
+                                hasKeys = true
+                                isError = false
+                                message = describeSync(r)
+                            } catch (e: Exception) {
+                                isError = true
+                                message = "Не вдалося: ${e.message}"
+                            } finally {
+                                busy = false
+                            }
+                        }
+                    },
+                ) {
+                    if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    else Text(if (hasKeys) "Зберегти й оновити" else "Зберегти")
+                }
+                if (hasKeys) {
+                    TextButton(onClick = {
+                        repo.clearDeveloperKeys()
+                        accessKey = ""
+                        secretKey = ""
+                        hasKeys = false
+                        isError = false
+                        message = "Ключі видалено. Станції лишилися в списку."
+                    }) { Text("Видалити ключі") }
+                }
+            }
+        }
+    }
+}
+
+fun describeSync(r: SyncResult): String = buildString {
+    append("Синхронізовано: нових ${r.added}, оновлено ${r.updated}, прибрано ${r.removed}.")
+    if (r.unsupported.isNotEmpty()) {
+        append(" Поки не підтримуються: ${r.unsupported.joinToString()}.")
     }
 }

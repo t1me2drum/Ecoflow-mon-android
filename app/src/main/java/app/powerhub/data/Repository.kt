@@ -3,6 +3,7 @@ package app.powerhub.data
 import android.util.Log
 import app.powerhub.api.EcoflowCloud
 import app.powerhub.api.EcoflowException
+import app.powerhub.api.EcoflowOpenApi
 import app.powerhub.api.MqttLink
 import app.powerhub.api.Session
 import app.powerhub.protocol.Control
@@ -49,6 +50,7 @@ class Repository(
     val settings: SettingsStore,
     val history: HistoryDb,
     private val cloud: EcoflowCloud = EcoflowCloud(),
+    private val openApi: EcoflowOpenApi = EcoflowOpenApi(),
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -71,6 +73,33 @@ class Repository(
         credentials.save(c)
     }
 
+    val hasDeveloperKeys: Boolean get() = credentials.loadKeys() != null
+
+    fun developerKeys(): DeveloperKeys? = credentials.loadKeys()
+
+    /** Checks the keys against the cloud by syncing once; stores them only if that succeeds. */
+    suspend fun saveDeveloperKeys(keys: DeveloperKeys): SyncResult {
+        val result = syncStations(keys)
+        credentials.saveKeys(keys)
+        return result
+    }
+
+    fun clearDeveloperKeys() = credentials.saveKeys(null)
+
+    /** Pulls the account's station list from the official Developer API. */
+    suspend fun syncStations(keys: DeveloperKeys? = credentials.loadKeys()): SyncResult {
+        keys ?: throw EcoflowException("Ключі Developer API не задано")
+        val host = credentials.load()?.apiHost ?: API_HOSTS[0].first
+        val cloudDevices = openApi.listDevices(keys.accessKey, keys.secretKey, host)
+        val unsupported = ArrayList<String>()
+        val supported = cloudDevices.mapNotNull { c ->
+            val model = app.powerhub.protocol.DeviceModel.detect(c.sn, c.productName)
+            if (model == null) unsupported += "${c.name} (${c.productName ?: c.sn})"
+            model?.let { Device(c.sn, c.name, it, imported = true) }
+        }
+        return settings.applyCloudList(supported).copy(unsupported = unsupported)
+    }
+
     fun logout() {
         stop()
         credentials.clear()
@@ -85,6 +114,9 @@ class Repository(
         stop()
         runJob = scope.launch {
             launch { settings.devices.collect { syncSubscriptions(it) } }
+            if (credentials.loadKeys() != null) {
+                launch { runCatching { syncStations() }.onFailure { Log.w(TAG, "station sync failed", it) } }
+            }
             connectLoop()
         }
     }

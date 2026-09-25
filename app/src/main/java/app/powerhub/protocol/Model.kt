@@ -17,9 +17,44 @@ enum class DeviceModel(val title: String) {
             DELTA_3_MAX -> Delta3Protocol.max
             DELTA_PRO_3 -> DeltaPro3Protocol
         }
+
+    companion object {
+        /**
+         * Maps a station from the account list to a supported model. The cloud omits
+         * productName for some models (e.g. Delta 3), so the serial-number prefix is checked first.
+         */
+        fun detect(sn: String, productName: String?): DeviceModel? {
+            val bySn = when {
+                sn.startsWith("R331") -> DELTA_2
+                sn.startsWith("R351") -> DELTA_2_MAX
+                sn.startsWith("MR51") -> DELTA_PRO_3
+                sn.startsWith("P231") -> DELTA_3
+                else -> null
+            }
+            if (bySn != null) return bySn
+            return when (productName?.trim()?.uppercase()) {
+                "DELTA 2" -> DELTA_2
+                "DELTA 2 MAX" -> DELTA_2_MAX
+                "DELTA 3", "DELTA 3 PLUS" -> DELTA_3
+                "DELTA 3 MAX", "DELTA 3 MAX PLUS" -> DELTA_3_MAX
+                "DELTA PRO 3" -> DELTA_PRO_3
+                else -> null
+            }
+        }
+    }
 }
 
-data class Device(val sn: String, val name: String, val model: DeviceModel)
+/**
+ * [imported]: came from the account list and is removed when it disappears from it.
+ * [customName]: renamed in this app, so account sync keeps the local name.
+ */
+data class Device(
+    val sn: String,
+    val name: String,
+    val model: DeviceModel,
+    val imported: Boolean = false,
+    val customName: Boolean = false,
+)
 
 enum class TopicKind { DATA, GET_REPLY, SET_REPLY }
 
