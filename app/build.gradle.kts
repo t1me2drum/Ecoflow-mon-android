@@ -17,7 +17,23 @@ android {
         versionName = "0.2.0"
     }
 
+    // CI signs with a persistent key (GitHub secrets) so new APKs install over old ones.
+    // Without the env vars the standard local debug key is used.
+    val ciKeystore = System.getenv("SIGNING_KEYSTORE_FILE")?.let { file(it) }?.takeIf { it.exists() }
+    val ciSigning = ciKeystore?.let {
+        signingConfigs.create("ci") {
+            storeFile = it
+            storeType = "pkcs12"
+            storePassword = System.getenv("SIGNING_PASSWORD")
+            keyAlias = "powerhub"
+            keyPassword = System.getenv("SIGNING_PASSWORD")
+        }
+    }
+
     buildTypes {
+        debug {
+            if (ciSigning != null) signingConfig = ciSigning
+        }
         release {
             // Full protobuf runtime relies on reflection over generated classes,
             // so shrinking stays off to keep the build simple.
