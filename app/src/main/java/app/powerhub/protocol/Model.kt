@@ -7,7 +7,9 @@ enum class DeviceModel(val title: String) {
     DELTA_2_MAX("Delta 2 Max"),
     DELTA_3("Delta 3"),
     DELTA_3_MAX("Delta 3 Max"),
-    DELTA_PRO_3("Delta Pro 3");
+    DELTA_PRO_3("Delta Pro 3"),
+    DELTA_MAX("Delta Max"),
+    RIVER_2_MAX("River 2 Max");
 
     val protocol: DeviceProtocol
         get() = when (this) {
@@ -16,6 +18,8 @@ enum class DeviceModel(val title: String) {
             DELTA_3 -> Delta3Protocol.standard
             DELTA_3_MAX -> Delta3Protocol.max
             DELTA_PRO_3 -> DeltaPro3Protocol
+            DELTA_MAX -> DeltaMaxProtocol
+            RIVER_2_MAX -> River2MaxProtocol
         }
 
     companion object {
@@ -29,6 +33,8 @@ enum class DeviceModel(val title: String) {
                 sn.startsWith("R351") -> DELTA_2_MAX
                 sn.startsWith("MR51") -> DELTA_PRO_3
                 sn.startsWith("P231") -> DELTA_3
+                sn.startsWith("R611") -> RIVER_2_MAX
+                sn.startsWith("DA") -> DELTA_MAX
                 else -> null
             }
             if (bySn != null) return bySn
@@ -38,6 +44,8 @@ enum class DeviceModel(val title: String) {
                 "DELTA 3", "DELTA 3 PLUS" -> DELTA_3
                 "DELTA 3 MAX", "DELTA 3 MAX PLUS" -> DELTA_3_MAX
                 "DELTA PRO 3" -> DELTA_PRO_3
+                "DELTA MAX" -> DELTA_MAX
+                "RIVER 2 MAX" -> RIVER_2_MAX
                 else -> null
             }
         }

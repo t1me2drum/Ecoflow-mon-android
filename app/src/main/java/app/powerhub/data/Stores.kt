@@ -73,6 +73,10 @@ class SettingsStore(context: Context) {
     private val _devices = MutableStateFlow(readDevices())
     val devices: StateFlow<List<Device>> = _devices.asStateFlow()
 
+    /** Account stations the user deleted here: sync must not bring them back. sn → name. */
+    private val _hidden = MutableStateFlow(readHidden())
+    val hidden: StateFlow<Map<String, String>> = _hidden.asStateFlow()
+
     private val _alerts = MutableStateFlow(readAlerts())
     val alerts: StateFlow<AlertSettings> = _alerts.asStateFlow()
 
@@ -100,7 +104,24 @@ class SettingsStore(context: Context) {
         _devices.value = list
     }
 
-    fun addDevice(d: Device) = writeDevices(_devices.value.filterNot { it.sn == d.sn } + d)
+    fun addDevice(d: Device) {
+        unhide(d.sn)
+        writeDevices(_devices.value.filterNot { it.sn == d.sn } + d)
+    }
+
+    private fun readHidden(): Map<String, String> {
+        val o = runCatching { JSONObject(prefs.getString("hidden", "{}")) }.getOrElse { JSONObject() }
+        return o.keys().asSequence().associateWith { o.optString(it) }
+    }
+
+    private fun writeHidden(map: Map<String, String>) {
+        prefs.edit().putString("hidden", JSONObject(map).toString()).apply()
+        _hidden.value = map
+    }
+
+    fun unhide(sn: String) {
+        if (sn in _hidden.value) writeHidden(_hidden.value - sn)
+    }
 
     /** Saves a new display order; stations missing from [sns] keep their place at the end. */
     fun reorder(sns: List<String>) {
@@ -109,13 +130,18 @@ class SettingsStore(context: Context) {
         writeDevices(ordered + _devices.value.filterNot { it.sn in sns })
     }
 
-    fun removeDevice(sn: String) = writeDevices(_devices.value.filterNot { it.sn == sn })
+    fun removeDevice(sn: String) {
+        val d = _devices.value.find { it.sn == sn } ?: return
+        if (d.imported) writeHidden(_hidden.value + (sn to d.name))
+        writeDevices(_devices.value.filterNot { it.sn == sn })
+    }
 
     fun renameDevice(sn: String, name: String) =
         writeDevices(_devices.value.map { if (it.sn == sn) it.copy(name = name, customName = true) else it })
 
     /** Applies the account's station list; manually added stations are never touched. */
-    fun applyCloudList(cloud: List<Device>): SyncResult {
+    fun applyCloudList(all: List<Device>): SyncResult {
+        val cloud = all.filterNot { it.sn in _hidden.value }
         val current = _devices.value
         val bySn = cloud.associateBy { it.sn }
         var updated = 0

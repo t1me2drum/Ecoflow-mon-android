@@ -196,15 +196,10 @@ fun DevicesScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
     }
 
     removing?.let { d ->
-        AlertDialog(
-            onDismissRequest = { removing = null },
-            title = { Text("Видалити ${d.name}?") },
-            text = { Text("Станцію буде прибрано зі списку. Історія лишиться на телефоні.") },
-            confirmButton = {
-                TextButton(onClick = { repo.settings.removeDevice(d.sn); removing = null }) { Text("Видалити") }
-            },
-            dismissButton = { TextButton(onClick = { removing = null }) { Text("Скасувати") } },
-        )
+        DeleteStationDialog(d, onDismiss = { removing = null }) {
+            repo.settings.removeDevice(d.sn)
+            removing = null
+        }
     }
 }
 

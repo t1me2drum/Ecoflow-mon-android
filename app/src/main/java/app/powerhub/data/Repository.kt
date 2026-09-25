@@ -100,6 +100,12 @@ class Repository(
         return settings.applyCloudList(supported).copy(unsupported = unsupported)
     }
 
+    /** Brings back a station deleted earlier; it reappears with the next account sync. */
+    suspend fun restoreStation(sn: String): SyncResult {
+        settings.unhide(sn)
+        return syncStations()
+    }
+
     fun logout() {
         stop()
         credentials.clear()

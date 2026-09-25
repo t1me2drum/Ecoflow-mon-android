@@ -63,6 +63,7 @@ fun SettingsScreen(onBack: () -> Unit, onLoggedOut: () -> Unit) {
         ) {
             ConnectionBanner(conn)
             DeveloperKeysCard()
+            HiddenStationsCard()
             Card {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Сповіщення", style = MaterialTheme.typography.titleSmall)
@@ -199,5 +200,34 @@ fun describeSync(r: SyncResult): String = buildString {
     append("Синхронізовано: нових ${r.added}, оновлено ${r.updated}, прибрано ${r.removed}.")
     if (r.unsupported.isNotEmpty()) {
         append(" Поки не підтримуються: ${r.unsupported.joinToString()}.")
+    }
+}
+
+@Composable
+private fun HiddenStationsCard() {
+    val repo = PowerHubApp.repo
+    val hidden by repo.settings.hidden.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    if (hidden.isEmpty()) return
+    Card {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Видалені станції", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Є в акаунті EcoFlow, але приховані в PowerHub.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            hidden.forEach { (sn, name) ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(name)
+                        Text(sn, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                    }
+                    TextButton(onClick = { scope.launch { runCatching { repo.restoreStation(sn) } } }) {
+                        Text("Повернути")
+                    }
+                }
+            }
+        }
     }
 }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
@@ -67,6 +68,7 @@ fun DeviceScreen(sn: String, onBack: () -> Unit) {
     val online = snap?.isOnline() == true
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var renaming by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(sn) { repo.requestQuota(device) }
@@ -79,6 +81,7 @@ fun DeviceScreen(sn: String, onBack: () -> Unit) {
                 actions = {
                     IconButton(onClick = { renaming = true }) { Icon(Icons.Default.Edit, "Перейменувати") }
                     IconButton(onClick = { repo.requestQuota(device) }) { Icon(Icons.Default.Refresh, "Оновити") }
+                    IconButton(onClick = { deleting = true }) { Icon(Icons.Default.Delete, "Видалити станцію") }
                 },
             )
         },
@@ -96,6 +99,14 @@ fun DeviceScreen(sn: String, onBack: () -> Unit) {
                 2 -> HistoryPane(device)
                 3 -> RawData(params)
             }
+        }
+    }
+
+    if (deleting) {
+        DeleteStationDialog(device, onDismiss = { deleting = false }) {
+            deleting = false
+            onBack()
+            repo.settings.removeDevice(device.sn)
         }
     }
 

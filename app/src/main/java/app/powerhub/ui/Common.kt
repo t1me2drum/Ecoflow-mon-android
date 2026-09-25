@@ -79,6 +79,26 @@ fun RenameDialog(current: String, onDismiss: () -> Unit, onRename: (String) -> U
 }
 
 @Composable
+fun DeleteStationDialog(device: app.powerhub.protocol.Device, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Видалити ${device.name}?") },
+        text = {
+            Text(
+                if (device.imported) {
+                    "Станцію буде прибрано лише з PowerHub на цьому телефоні. В акаунті EcoFlow і в офіційному " +
+                        "застосунку вона лишиться. Під час синхронізації вона не повернеться; відновити можна в Налаштуваннях."
+                } else {
+                    "Станцію буде прибрано лише з PowerHub на цьому телефоні. В акаунті EcoFlow вона лишиться."
+                },
+            )
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Видалити") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Скасувати") } },
+    )
+}
+
+@Composable
 fun ConnectionBanner(state: ConnState) {
     val text = when (state) {
         ConnState.Connected, ConnState.Idle -> return
