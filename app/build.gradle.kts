@@ -13,8 +13,8 @@ android {
         applicationId = "app.powerhub"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
     }
 
     // CI signs with a persistent key (GitHub secrets) so new APKs install over old ones.
@@ -89,4 +89,5 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
     implementation("com.google.protobuf:protobuf-java:4.29.3")
+    implementation("sh.calvin.reorderable:reorderable:2.4.3")
 }

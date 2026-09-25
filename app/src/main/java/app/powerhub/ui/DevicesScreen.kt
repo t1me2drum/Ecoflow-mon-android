@@ -1,6 +1,15 @@
 package app.powerhub.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.DragIndicator
+import androidx.compose.material3.CardDefaults
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.unit.Dp
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -65,6 +74,21 @@ fun DevicesScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
     var syncing by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    var sortMenu by remember { mutableStateOf(false) }
+
+    // Local copy so drag moves render instantly; persisted when the drag ends.
+    var ordered by remember { mutableStateOf(devices) }
+    var dragging by remember { mutableStateOf(false) }
+    LaunchedEffect(devices) { if (!dragging) ordered = devices }
+    val listState = rememberLazyListState()
+    val reorderState = rememberReorderableLazyListState(listState) { from, to ->
+        ordered = ordered.toMutableList().apply { add(to.index, removeAt(from.index)) }
+    }
+
+    fun applyOrder(list: List<Device>) {
+        ordered = list
+        repo.settings.reorder(list.map { it.sn })
+    }
 
     fun sync() {
         if (syncing) return
@@ -91,6 +115,30 @@ fun DevicesScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
                             Icon(Icons.Default.Sync, "Оновити список станцій")
                         }
                     }
+                    Box {
+                        IconButton(onClick = { sortMenu = true }) { Icon(Icons.AutoMirrored.Filled.Sort, "Сортування") }
+                        DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Спершу онлайн") },
+                                onClick = {
+                                    sortMenu = false
+                                    // Stable sort: relative order inside each group is preserved.
+                                    applyOrder(ordered.sortedByDescending { snapshots[it.sn]?.isOnline() == true })
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("За назвою") },
+                                onClick = { sortMenu = false; applyOrder(ordered.sortedBy { it.name.lowercase() }) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("За рівнем заряду") },
+                                onClick = {
+                                    sortMenu = false
+                                    applyOrder(ordered.sortedByDescending { d -> repo.state(d).soc ?: -1 })
+                                },
+                            )
+                        }
+                    }
                     IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "Налаштування") }
                 },
             )
@@ -115,16 +163,27 @@ fun DevicesScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
             }
             // Compact cards (~76dp) so six stations fit on one screen; bottom padding keeps the last card clear of the FAB.
             LazyColumn(
+                state = listState,
                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 88.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(devices, key = { it.sn }) { d ->
-                    DeviceCard(
-                        d, snapshots[d.sn],
-                        onClick = { onOpen(d.sn) },
-                        onRename = { renaming = d },
-                        onRemove = { removing = d },
-                    )
+                items(ordered, key = { it.sn }) { d ->
+                    ReorderableItem(reorderState, key = d.sn) { isDragging ->
+                        val elevation by animateDpAsState(if (isDragging) 8.dp else 1.dp, label = "drag")
+                        DeviceCard(
+                            d, snapshots[d.sn], elevation,
+                            dragHandle = Modifier.draggableHandle(
+                                onDragStarted = { dragging = true },
+                                onDragStopped = {
+                                    dragging = false
+                                    repo.settings.reorder(ordered.map { it.sn })
+                                },
+                            ),
+                            onClick = { onOpen(d.sn) },
+                            onRename = { renaming = d },
+                            onRemove = { removing = d },
+                        )
+                    }
                 }
             }
         }
@@ -154,6 +213,8 @@ fun DevicesScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
 private fun DeviceCard(
     d: Device,
     snap: DeviceSnapshot?,
+    elevation: Dp,
+    dragHandle: Modifier,
     onClick: () -> Unit,
     onRename: () -> Unit,
     onRemove: () -> Unit,
@@ -163,8 +224,11 @@ private fun DeviceCard(
     var menu by remember { mutableStateOf(false) }
 
     Box {
-        Card(Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = { menu = true })) {
-            Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Card(
+            Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = { menu = true }),
+            elevation = CardDefaults.cardElevation(defaultElevation = elevation),
+        ) {
+            Row(Modifier.padding(start = 12.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 SocRing(state.soc, online, 56.dp, 6.dp)
                 Column(Modifier.padding(start = 12.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -192,6 +256,10 @@ private fun DeviceCard(
                         status, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         color = if (online) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
                     )
+                }
+                // Drag starts immediately from the handle; the rest of the card keeps tap / long-press.
+                Box(dragHandle.padding(horizontal = 8.dp, vertical = 16.dp)) {
+                    Icon(Icons.Default.DragIndicator, "Перетягнути", tint = MaterialTheme.colorScheme.outline)
                 }
             }
         }

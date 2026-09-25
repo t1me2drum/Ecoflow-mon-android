@@ -102,6 +102,13 @@ class SettingsStore(context: Context) {
 
     fun addDevice(d: Device) = writeDevices(_devices.value.filterNot { it.sn == d.sn } + d)
 
+    /** Saves a new display order; stations missing from [sns] keep their place at the end. */
+    fun reorder(sns: List<String>) {
+        val bySn = _devices.value.associateBy { it.sn }
+        val ordered = sns.mapNotNull { bySn[it] }
+        writeDevices(ordered + _devices.value.filterNot { it.sn in sns })
+    }
+
     fun removeDevice(sn: String) = writeDevices(_devices.value.filterNot { it.sn == sn })
 
     fun renameDevice(sn: String, name: String) =
