@@ -79,6 +79,9 @@ class SettingsStore(context: Context) {
 
     fun removeDevice(sn: String) = writeDevices(_devices.value.filterNot { it.sn == sn })
 
+    fun renameDevice(sn: String, name: String) =
+        writeDevices(_devices.value.map { if (it.sn == sn) it.copy(name = name) else it })
+
     private fun readAlerts() = AlertSettings(
         lowBattery = prefs.getBoolean("alert_low", true),
         lowBatteryPercent = prefs.getInt("alert_low_pct", 20),

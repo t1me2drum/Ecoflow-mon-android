@@ -13,6 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -65,6 +66,7 @@ fun DeviceScreen(sn: String, onBack: () -> Unit) {
     val state = device.model.protocol.state(params)
     val online = snap?.isOnline() == true
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    var renaming by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(sn) { repo.requestQuota(device) }
@@ -74,7 +76,10 @@ fun DeviceScreen(sn: String, onBack: () -> Unit) {
             TopAppBar(
                 title = { Text(device.name) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад") } },
-                actions = { IconButton(onClick = { repo.requestQuota(device) }) { Icon(Icons.Default.Refresh, "Оновити") } },
+                actions = {
+                    IconButton(onClick = { renaming = true }) { Icon(Icons.Default.Edit, "Перейменувати") }
+                    IconButton(onClick = { repo.requestQuota(device) }) { Icon(Icons.Default.Refresh, "Оновити") }
+                },
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
@@ -91,6 +96,13 @@ fun DeviceScreen(sn: String, onBack: () -> Unit) {
                 2 -> HistoryPane(device)
                 3 -> RawData(params)
             }
+        }
+    }
+
+    if (renaming) {
+        RenameDialog(device.name, onDismiss = { renaming = false }) {
+            repo.settings.renameDevice(device.sn, it)
+            renaming = false
         }
     }
 }
