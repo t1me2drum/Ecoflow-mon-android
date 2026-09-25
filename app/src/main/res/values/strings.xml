@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PowerHub</string>
+    <string name="widget_name">Заряд станції</string>
+    <string name="widget_description">Рівень заряду та потужність</string>
+</resources>
