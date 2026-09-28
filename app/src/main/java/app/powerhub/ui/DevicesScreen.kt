@@ -245,26 +245,51 @@ private fun DeviceCard(
                             modifier = Modifier.alignByBaseline(),
                         )
                     }
+                    // Line 2: input / output power and grid status.
                     val grid = state.gridStatus(weakGridVolt)
-                    val status = when {
-                        !online -> if (snap == null) "Очікування даних…" else "Не на зв'язку"
-                        grid == GridStatus.WEAK -> "⚠ слабка мережа ${state.acInVolt} В · ↑ ${watts(state.outputW)}"
-                        else -> {
-                            val gridText = when (grid) {
-                                GridStatus.OK -> " · мережа ✓"
-                                GridStatus.NONE -> " · без мережі"
-                                else -> ""
-                            }
-                            "↓ ${watts(state.inputW)} · ↑ ${watts(state.outputW)}$gridText"
+                    if (!online) {
+                        Text(
+                            if (snap == null) "Очікування даних…" else "Не на зв'язку",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline,
+                        )
+                    } else {
+                        Row {
+                            Text(
+                                "↓ ${watts(state.inputW)} · ↑ ${watts(state.outputW)} · ",
+                                style = MaterialTheme.typography.bodySmall, maxLines = 1,
+                            )
+                            Text(
+                                when (grid) {
+                                    GridStatus.OK -> "мережа ✓" + (state.acInVolt?.let { " $it В" } ?: "")
+                                    GridStatus.WEAK -> "⚠ слабка мережа ${state.acInVolt} В"
+                                    GridStatus.NONE -> "без мережі"
+                                    null -> "мережа —"
+                                },
+                                style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                color = when (grid) {
+                                    GridStatus.WEAK -> WarningColor
+                                    GridStatus.NONE -> MaterialTheme.colorScheme.error
+                                    else -> MaterialTheme.colorScheme.onSurface
+                                },
+                            )
                         }
                     }
+                    // Line 3: time until empty (or until full while charging from the grid).
+                    val timeText = when {
+                        !online -> snap?.lastSeen?.takeIf { it > 0 }?.let {
+                            "останні дані о " + java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(it)
+                        }
+                        state.dischargeRemainMin != null && !state.chargingFromGrid(weakGridVolt) ->
+                            "⏱ вистачить на ${minutes(state.dischargeRemainMin)}"
+                        state.chargeRemainMin != null -> "⏱ до повного заряду ${minutes(state.chargeRemainMin)}"
+                        state.dischargeRemainMin != null -> "⏱ вистачить на ${minutes(state.dischargeRemainMin)}"
+                        else -> null
+                    }
                     Text(
-                        status, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        color = when {
-                            !online -> MaterialTheme.colorScheme.outline
-                            grid == GridStatus.WEAK -> WarningColor
-                            else -> MaterialTheme.colorScheme.onSurface
-                        },
+                        timeText ?: "⏱ —",
+                        style = MaterialTheme.typography.bodySmall, maxLines = 1,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 // Drag starts immediately from the handle; the rest of the card keeps tap / long-press.
