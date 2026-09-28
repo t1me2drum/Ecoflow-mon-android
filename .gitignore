@@ -7,3 +7,11 @@ local.properties
 captures/
 .externalNativeBuild/
 .cxx/
+
+# graphify: keep only the paid-for semantic cache and the report; everything else is
+# machine-specific or regenerated for free by `/graphify .`
+graphify-out/*
+!graphify-out/GRAPH_REPORT.md
+!graphify-out/cache/
+graphify-out/cache/*
+!graphify-out/cache/semantic/
