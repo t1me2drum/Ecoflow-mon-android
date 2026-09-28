@@ -222,8 +222,8 @@ fun Params.sumOf(vararg keys: String, abs: Boolean = false): Int? {
     return if (values.isEmpty()) null else values.sum()
 }
 
-/** Remaining-time fields use large sentinel values (e.g. 5939) when idle. */
-fun validMinutes(v: Int?): Int? = v?.takeIf { it in 1..5998 }
+/** Remaining-time fields report 5939 (or more) as "no estimate"; real estimates stay below it. */
+fun validMinutes(v: Int?): Int? = v?.takeIf { it in 1 until 5939 }
 
 val SCREEN_TIMEOUT_OPTIONS = listOf(
     "Ніколи" to 0, "10 с" to 10, "30 с" to 30, "1 хв" to 60, "5 хв" to 300, "30 хв" to 1800,
