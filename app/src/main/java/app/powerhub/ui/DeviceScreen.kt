@@ -53,6 +53,7 @@ import app.powerhub.protocol.Control
 import app.powerhub.protocol.Device
 import app.powerhub.protocol.DeviceState
 import app.powerhub.protocol.GridStatus
+import app.powerhub.protocol.batteryFlow
 import app.powerhub.protocol.chargingFromGrid
 import app.powerhub.protocol.gridStatus
 import app.powerhub.protocol.Params
@@ -141,14 +142,12 @@ private fun Overview(device: Device, s: DeviceState, online: Boolean, weakGridVo
                 )
             }
         }
-        val charging = (s.inputW ?: 0) > (s.outputW ?: 0)
-        val remainText = when {
-            charging && s.chargeRemainMin != null -> "До повного заряду: ${minutes(s.chargeRemainMin)}"
-            !charging && s.dischargeRemainMin != null -> "Вистачить на: ${minutes(s.dischargeRemainMin)}"
-            else -> null
-        }
-        remainText?.let {
-            Text(it, style = MaterialTheme.typography.titleMedium, modifier = Modifier.align(Alignment.CenterHorizontally))
+        if (online) {
+            Text(
+                flowText(s.batteryFlow()),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             BigStat("Вхід", watts(s.inputW), Modifier.weight(1f))

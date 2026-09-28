@@ -65,9 +65,9 @@ class AlertEngine(private val context: Context) {
                             notify(device, 3, "Слабка мережа: $volt", "${device.name} не заряджається від мережі, заряд $soc%")
                         GridStatus.OK ->
                             if (prev == GridStatus.WEAK) {
-                                notify(device, 3, "Напруга відновилася: $volt", "${device.name} знову заряджається від мережі")
+                                notify(device, 3, "Напруга відновилася: $volt", "${device.name}: мережа в нормі, заряд $soc%")
                             } else {
-                                notify(device, 3, "Живлення з'явилося", "${device.name} знову заряджається від мережі")
+                                notify(device, 3, "Живлення з'явилося", "${device.name}: мережа $volt, заряд $soc%")
                             }
                     }
                 }

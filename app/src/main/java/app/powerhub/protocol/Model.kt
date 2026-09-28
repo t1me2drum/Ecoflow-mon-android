@@ -99,9 +99,43 @@ fun DeviceState.gridStatus(weakBelowVolt: Int): GridStatus? = when (gridConnecte
     true -> if (acInVolt != null && acInVolt in 1 until weakBelowVolt) GridStatus.WEAK else GridStatus.OK
 }
 
-/** Charging from the grid only when AC power actually flows in at normal voltage. */
+/**
+ * Charging from the grid only when AC power flows in at normal voltage and the battery is not
+ * losing energy (a load larger than the grid input drains it despite the grid).
+ */
 fun DeviceState.chargingFromGrid(weakBelowVolt: Int): Boolean =
-    gridStatus(weakBelowVolt) == GridStatus.OK && (acInW ?: 0) > 5
+    gridStatus(weakBelowVolt) == GridStatus.OK && (acInW ?: 0) > 5 && batteryFlow() !is BatteryFlow.Discharging
+
+/** What the battery is actually doing, derived from power flow rather than from remaining-time fields. */
+sealed interface BatteryFlow {
+    /** Battery gains energy (grid, solar or car). [minutes] null when the station reports no valid estimate. */
+    data class Charging(val minutes: Int?) : BatteryFlow
+    data class Discharging(val minutes: Int?) : BatteryFlow
+    data object Full : BatteryFlow
+    data object Idle : BatteryFlow
+    data object Unknown : BatteryFlow
+}
+
+/** Net power below this is treated as idle: standby draw and sensor noise. */
+private const val FLOW_DEADBAND_W = 10
+
+/**
+ * Stations keep sending the last charge/discharge estimate even when the direction flips
+ * (e.g. Delta Pro 3 still reports time-to-full after the grid drops), so the direction is
+ * decided by input vs output power and only the matching estimate is used.
+ */
+fun DeviceState.batteryFlow(): BatteryFlow {
+    val input = inputW
+    val output = outputW
+    if (input == null && output == null) return BatteryFlow.Unknown
+    val net = (input ?: 0) - (output ?: 0)
+    return when {
+        net > FLOW_DEADBAND_W -> if ((soc ?: 0) >= 100) BatteryFlow.Full else BatteryFlow.Charging(chargeRemainMin)
+        net < -FLOW_DEADBAND_W -> BatteryFlow.Discharging(dischargeRemainMin)
+        (soc ?: 0) >= 100 -> BatteryFlow.Full
+        else -> BatteryFlow.Idle
+    }
+}
 
 /** A message ready to be published to the device's set or get topic. */
 class Outgoing(val payload: ByteArray)

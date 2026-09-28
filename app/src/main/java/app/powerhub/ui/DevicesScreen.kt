@@ -60,6 +60,7 @@ import app.powerhub.data.DeviceSnapshot
 import app.powerhub.protocol.Device
 import app.powerhub.protocol.DeviceModel
 import app.powerhub.protocol.GridStatus
+import app.powerhub.protocol.batteryFlow
 import app.powerhub.protocol.chargingFromGrid
 import app.powerhub.protocol.gridStatus
 import kotlinx.coroutines.launch
@@ -275,19 +276,16 @@ private fun DeviceCard(
                             )
                         }
                     }
-                    // Line 3: time until empty (or until full while charging from the grid).
-                    val timeText = when {
-                        !online -> snap?.lastSeen?.takeIf { it > 0 }?.let {
+                    // Line 3: what the battery is doing, from power flow; only the matching estimate is shown.
+                    val timeText = if (!online) {
+                        snap?.lastSeen?.takeIf { it > 0 }?.let {
                             "останні дані о " + java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(it)
-                        }
-                        state.dischargeRemainMin != null && !state.chargingFromGrid(weakGridVolt) ->
-                            "⏱ вистачить на ${minutes(state.dischargeRemainMin)}"
-                        state.chargeRemainMin != null -> "⏱ до повного заряду ${minutes(state.chargeRemainMin)}"
-                        state.dischargeRemainMin != null -> "⏱ вистачить на ${minutes(state.dischargeRemainMin)}"
-                        else -> null
+                        } ?: "—"
+                    } else {
+                        flowText(state.batteryFlow())
                     }
                     Text(
-                        timeText ?: "⏱ —",
+                        timeText,
                         style = MaterialTheme.typography.bodySmall, maxLines = 1,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

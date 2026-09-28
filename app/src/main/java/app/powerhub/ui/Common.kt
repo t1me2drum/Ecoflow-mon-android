@@ -42,6 +42,16 @@ import app.powerhub.data.ConnState
 /** Amber used for "grid present but too weak to charge". */
 val WarningColor = Color(0xFFF2A900)
 
+fun flowText(flow: app.powerhub.protocol.BatteryFlow): String = when (flow) {
+    is app.powerhub.protocol.BatteryFlow.Charging ->
+        flow.minutes?.let { "⏱ до повного заряду ${minutes(it)}" } ?: "⚡ заряджається"
+    is app.powerhub.protocol.BatteryFlow.Discharging ->
+        flow.minutes?.let { "⏱ вистачить на ${minutes(it)}" } ?: "🔋 розряджається"
+    app.powerhub.protocol.BatteryFlow.Full -> "✓ повністю заряджено"
+    app.powerhub.protocol.BatteryFlow.Idle -> "без навантаження"
+    app.powerhub.protocol.BatteryFlow.Unknown -> "⏱ —"
+}
+
 fun watts(w: Int?): String = w?.let { if (it >= 1000) "%.2f кВт".format(it / 1000.0) else "$it Вт" } ?: "—"
 
 fun minutes(m: Int?): String {
