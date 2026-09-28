@@ -52,7 +52,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.powerhub.PowerHubApp
@@ -255,26 +258,29 @@ private fun DeviceCard(
                             color = MaterialTheme.colorScheme.outline,
                         )
                     } else {
-                        Row {
-                            Text(
-                                "↓ ${watts(state.inputW)} · ↑ ${watts(state.outputW)} · ",
-                                style = MaterialTheme.typography.bodySmall, maxLines = 1,
-                            )
-                            Text(
-                                when (grid) {
-                                    GridStatus.OK -> "мережа ✓" + (state.acInVolt?.let { " $it В" } ?: "")
-                                    GridStatus.WEAK -> "⚠ слабка мережа ${state.acInVolt} В"
-                                    GridStatus.NONE -> "без мережі"
-                                    null -> "мережа —"
-                                },
-                                style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                color = when (grid) {
-                                    GridStatus.WEAK -> WarningColor
-                                    GridStatus.NONE -> MaterialTheme.colorScheme.error
-                                    else -> MaterialTheme.colorScheme.onSurface
-                                },
-                            )
+                        // One Text with a coloured span: two Texts in a Row drift apart vertically
+                        // because symbols like ⚠ / ✓ change the line height of their own Text.
+                        val gridColor = when (grid) {
+                            GridStatus.WEAK -> WarningColor
+                            GridStatus.NONE -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.onSurface
                         }
+                        Text(
+                            buildAnnotatedString {
+                                append("↓ ${watts(state.inputW)} · ↑ ${watts(state.outputW)} · ")
+                                withStyle(SpanStyle(color = gridColor)) {
+                                    append(
+                                        when (grid) {
+                                            GridStatus.OK -> "мережа ✓" + (state.acInVolt?.let { " $it В" } ?: "")
+                                            GridStatus.WEAK -> "⚠ слабка мережа ${state.acInVolt} В"
+                                            GridStatus.NONE -> "без мережі"
+                                            null -> "мережа —"
+                                        },
+                                    )
+                                }
+                            },
+                            style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
                     }
                     // Line 3: what the battery is doing, from power flow; only the matching estimate is shown.
                     val timeText = if (!online) {
