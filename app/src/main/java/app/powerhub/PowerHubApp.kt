@@ -3,6 +3,7 @@ package app.powerhub
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import app.powerhub.diag.DiagLog
 import app.powerhub.data.CredentialStore
 import app.powerhub.data.HistoryDb
 import app.powerhub.data.Repository
@@ -15,6 +16,7 @@ class PowerHubApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        DiagLog.init(this)
         repository = Repository(CredentialStore(this), SettingsStore(this), HistoryDb(this))
 
         val nm = getSystemService(NotificationManager::class.java)

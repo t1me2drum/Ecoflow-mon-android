@@ -15,6 +15,7 @@ import androidx.core.content.ContextCompat
 import app.powerhub.PowerHubApp
 import app.powerhub.R
 import app.powerhub.data.ConnState
+import app.powerhub.diag.DiagLog
 import app.powerhub.protocol.GridStatus
 import app.powerhub.protocol.gridStatus
 import app.powerhub.ui.MainActivity
@@ -59,7 +60,7 @@ class MonitorService : Service() {
         }
         scope.launch {
             while (isActive) {
-                runCatching { onTick() }
+                runCatching { onTick() }.onFailure { DiagLog.log("service", "tick failed", it) }
                 delay(TICK_MS)
             }
         }

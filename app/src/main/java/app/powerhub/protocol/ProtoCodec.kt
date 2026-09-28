@@ -1,6 +1,6 @@
 package app.powerhub.protocol
 
-import android.util.Base64
+import java.util.Base64
 import app.powerhub.proto.Delta3Proto
 import com.google.protobuf.ByteString
 import com.google.protobuf.Descriptors.Descriptor
@@ -41,7 +41,7 @@ object ProtoCodec {
             c in 'A'..'Z' || c in 'a'..'z' || c in '0'..'9' || c == '+' || c == '/' || c == '='
         }
         if (!isB64) return payload
-        return runCatching { Base64.decode(payload, Base64.DEFAULT) }.getOrDefault(payload)
+        return runCatching { Base64.getDecoder().decode(payload) }.getOrDefault(payload)
     }
 
     /** Decodes [pdata] with [descriptor] and flattens nested messages using `_` as separator. */

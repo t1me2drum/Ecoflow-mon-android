@@ -36,7 +36,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.content.Intent
+import androidx.compose.ui.platform.LocalContext
 import app.powerhub.PowerHubApp
+import app.powerhub.diag.DiagLog
 import app.powerhub.data.DeveloperKeys
 import app.powerhub.data.ThemeMode
 import androidx.compose.material3.FilterChip
@@ -119,6 +122,7 @@ fun SettingsScreen(onBack: () -> Unit, onLoggedOut: () -> Unit) {
                     )
                 }
             }
+            DiagnosticsCard()
             OutlinedButton(
                 onClick = { repo.logout(); onLoggedOut() },
                 modifier = Modifier.fillMaxWidth(),
@@ -256,6 +260,29 @@ private fun ThemeCard() {
                 ThemeMode.entries.forEach { m ->
                     FilterChip(selected = mode == m, onClick = { settings.setTheme(m) }, label = { Text(m.title) })
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiagnosticsCard() {
+    val context = LocalContext.current
+    var lines by remember { mutableStateOf(DiagLog.lineCount()) }
+    Card {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Діагностика", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Журнал підключень, збоїв розбору даних і падінь застосунку ($lines рядків). " +
+                    "Паролів, токенів і ключів у ньому немає. Надішліть його, якщо щось працює не так.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = {
+                    context.startActivity(Intent.createChooser(DiagLog.shareIntent(context), "Журнал PowerHub"))
+                }) { Text("Поділитися журналом") }
+                TextButton(onClick = { DiagLog.clear(); lines = 0 }) { Text("Очистити") }
             }
         }
     }

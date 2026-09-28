@@ -1,6 +1,6 @@
 package app.powerhub.api
 
-import android.util.Log
+import app.powerhub.diag.DiagLog
 import org.eclipse.paho.client.mqttv3.IMqttActionListener
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken
 import org.eclipse.paho.client.mqttv3.IMqttToken
@@ -35,7 +35,7 @@ class MqttLink(
             }
 
             override fun connectionLost(cause: Throwable?) {
-                Log.w(TAG, "connection lost", cause)
+                DiagLog.log("mqtt", "connection lost: ${cause?.message}")
                 onConnected(false)
             }
 
@@ -43,7 +43,7 @@ class MqttLink(
                 try {
                     onMessage(topic, message.payload)
                 } catch (e: Exception) {
-                    Log.e(TAG, "message handling failed on $topic", e)
+                    DiagLog.log("mqtt", "message handling failed", e)
                 }
             }
 
@@ -96,7 +96,7 @@ class MqttLink(
             client.publish(topic, payload, 1, false)
             true
         } catch (e: MqttException) {
-            Log.e(TAG, "publish failed", e)
+            DiagLog.log("mqtt", "publish failed", e)
             false
         }
     }

@@ -1,6 +1,6 @@
 package app.powerhub.api
 
-import android.util.Base64
+import java.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
@@ -31,7 +31,7 @@ class EcoflowCloud(
     suspend fun login(host: String, email: String, password: String): Session = withContext(Dispatchers.IO) {
         val body = JSONObject()
             .put("email", email)
-            .put("password", Base64.encodeToString(password.toByteArray(), Base64.NO_WRAP))
+            .put("password", Base64.getEncoder().encodeToString(password.toByteArray()))
             .put("scene", "IOT_APP")
             .put("userType", "ECOFLOW")
             .toString()

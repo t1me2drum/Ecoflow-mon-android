@@ -13,8 +13,8 @@ android {
         applicationId = "app.powerhub"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
-        versionName = "0.7.4"
+        versionCode = 12
+        versionName = "0.8.0"
     }
 
     // CI signs with a persistent key (GitHub secrets) so new APKs install over old ones.
@@ -35,6 +35,9 @@ android {
             if (ciSigning != null) signingConfig = ciSigning
         }
         release {
+            // Same persistent key as debug builds, so a release installs over an earlier dev build.
+            // Locally (no CI key) it falls back to the debug key so assembleRelease still works.
+            signingConfig = ciSigning ?: signingConfigs.getByName("debug")
             // Full protobuf runtime relies on reflection over generated classes,
             // so shrinking stays off to keep the build simple.
             isMinifyEnabled = false
@@ -51,6 +54,10 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+    testOptions {
+        // Protocol code is plain JVM; any stray Android call returns defaults instead of throwing.
+        unitTests.isReturnDefaultValues = true
     }
     packaging {
         resources.excludes += setOf("META-INF/*.md", "META-INF/LICENSE*", "META-INF/NOTICE*")
@@ -90,4 +97,8 @@ dependencies {
     implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
     implementation("com.google.protobuf:protobuf-java:4.29.3")
     implementation("sh.calvin.reorderable:reorderable:2.4.3")
+
+    testImplementation("junit:junit:4.13.2")
+    // Real org.json for JVM tests; the android.jar copy is a stub.
+    testImplementation("org.json:json:20240303")
 }

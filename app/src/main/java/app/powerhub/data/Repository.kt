@@ -6,6 +6,7 @@ import app.powerhub.api.EcoflowException
 import app.powerhub.api.EcoflowOpenApi
 import app.powerhub.api.MqttLink
 import app.powerhub.api.Session
+import app.powerhub.diag.DiagLog
 import app.powerhub.protocol.Control
 import app.powerhub.protocol.Device
 import app.powerhub.protocol.DeviceState
@@ -56,6 +57,11 @@ class Repository(
 
     private val _conn = MutableStateFlow<ConnState>(ConnState.Idle)
     val connection: StateFlow<ConnState> = _conn.asStateFlow()
+
+    init {
+        // Every connection state change goes to the diagnostic log (reasons never contain secrets).
+        scope.launch { connection.collect { DiagLog.log("conn", it.toString()) } }
+    }
 
     private val _snapshots = MutableStateFlow<Map<String, DeviceSnapshot>>(emptyMap())
     val snapshots: StateFlow<Map<String, DeviceSnapshot>> = _snapshots.asStateFlow()
@@ -121,7 +127,11 @@ class Repository(
         runJob = scope.launch {
             launch { settings.devices.collect { syncSubscriptions(it) } }
             if (credentials.loadKeys() != null) {
-                launch { runCatching { syncStations() }.onFailure { Log.w(TAG, "station sync failed", it) } }
+                launch {
+                    runCatching { syncStations() }
+                        .onSuccess { DiagLog.log("sync", "stations: +${it.added} ~${it.updated} -${it.removed}, unsupported ${it.unsupported.size}") }
+                        .onFailure { DiagLog.log("sync", "station sync failed: ${it.message}") }
+                }
             }
             connectLoop()
         }
@@ -174,7 +184,7 @@ class Repository(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "connect failed", e)
+                DiagLog.log("conn", "connect failed", e)
                 _conn.value = ConnState.Reconnecting(e.message ?: e.javaClass.simpleName)
             }
             delay(backoff)
@@ -212,7 +222,14 @@ class Repository(
             else -> return
         }
         val device = settings.devices.value.find { it.sn == sn } ?: return
-        val parsed = device.model.protocol.parse(kind, payload)
+        val parsed = try {
+            device.model.protocol.parse(kind, payload)
+        } catch (e: Exception) {
+            // Keep a short hex prefix so an unknown frame layout can be identified from the log.
+            val head = payload.take(48).joinToString("") { "%02x".format(it) }
+            DiagLog.log("parse", "${device.model.title} $sn $kind ${payload.size} B: $head", e)
+            emptyMap()
+        }
         _snapshots.update { all ->
             val old = all[sn] ?: DeviceSnapshot()
             val params = if (parsed.isEmpty()) old.params else old.params + parsed
@@ -238,6 +255,7 @@ class Repository(
         val current = _snapshots.value[device.sn]?.params.orEmpty()
         val (payload, optimistic) = publish(current)
         val ok = l.publish(thingTopic(s, device.sn, "set"), payload)
+        if (!ok) DiagLog.log("cmd", "publish failed for ${device.model.title} ${device.sn}")
         if (ok) {
             _snapshots.update { all ->
                 val old = all[device.sn] ?: DeviceSnapshot()

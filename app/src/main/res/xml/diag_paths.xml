@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the shared log copy in cache/diag is exposed, nothing else in app storage. -->
+<paths>
+    <cache-path name="diag" path="diag/" />
+</paths>
