@@ -48,7 +48,8 @@ fun flowText(flow: app.powerhub.protocol.BatteryFlow): String = when (flow) {
     is app.powerhub.protocol.BatteryFlow.Discharging ->
         flow.minutes?.let { "⏱ вистачить на ${minutes(it)}" } ?: "🔋 розряджається"
     app.powerhub.protocol.BatteryFlow.Full -> "✓ повністю заряджено"
-    app.powerhub.protocol.BatteryFlow.Idle -> "без навантаження"
+    is app.powerhub.protocol.BatteryFlow.Idle ->
+        if (flow.loadW > 5) "🔌 навантаження ${flow.loadW} Вт · батарея в спокої" else "без навантаження"
     app.powerhub.protocol.BatteryFlow.Unknown -> "⏱ —"
 }
 

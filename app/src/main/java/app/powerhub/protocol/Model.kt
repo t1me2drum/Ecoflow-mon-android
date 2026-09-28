@@ -112,7 +112,11 @@ sealed interface BatteryFlow {
     data class Charging(val minutes: Int?) : BatteryFlow
     data class Discharging(val minutes: Int?) : BatteryFlow
     data object Full : BatteryFlow
-    data object Idle : BatteryFlow
+    /**
+     * Battery neither charging nor discharging. [loadW] is what the outputs still draw: on grid
+     * the load is fed straight through (input ≈ output), so there can be a load while idle.
+     */
+    data class Idle(val loadW: Int) : BatteryFlow
     data object Unknown : BatteryFlow
 }
 
@@ -133,7 +137,7 @@ fun DeviceState.batteryFlow(): BatteryFlow {
         net > FLOW_DEADBAND_W -> if ((soc ?: 0) >= 100) BatteryFlow.Full else BatteryFlow.Charging(chargeRemainMin)
         net < -FLOW_DEADBAND_W -> BatteryFlow.Discharging(dischargeRemainMin)
         (soc ?: 0) >= 100 -> BatteryFlow.Full
-        else -> BatteryFlow.Idle
+        else -> BatteryFlow.Idle(output ?: 0)
     }
 }
 

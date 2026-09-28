@@ -52,7 +52,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
@@ -254,7 +258,7 @@ private fun DeviceCard(
                     if (!online) {
                         Text(
                             if (snap == null) "Очікування даних…" else "Не на зв'язку",
-                            style = MaterialTheme.typography.bodySmall,
+                            style = cardLineStyle(),
                             color = MaterialTheme.colorScheme.outline,
                         )
                     } else {
@@ -279,7 +283,7 @@ private fun DeviceCard(
                                     )
                                 }
                             },
-                            style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            style = cardLineStyle(), maxLines = 1, overflow = TextOverflow.Ellipsis,
                         )
                     }
                     // Line 3: what the battery is doing, from power flow; only the matching estimate is shown.
@@ -292,7 +296,7 @@ private fun DeviceCard(
                     }
                     Text(
                         timeText,
-                        style = MaterialTheme.typography.bodySmall, maxLines = 1,
+                        style = cardLineStyle(), maxLines = 1,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -316,6 +320,17 @@ private fun DeviceCard(
         }
     }
 }
+
+/**
+ * Fixed line height, centred glyphs, no font padding: symbols such as ↓ ⚠ ✓ ⏱ come from a
+ * fallback font with different metrics and would otherwise shift their line up or down.
+ */
+@Composable
+private fun cardLineStyle(): TextStyle = MaterialTheme.typography.bodySmall.copy(
+    lineHeight = 16.sp,
+    lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
+    platformStyle = PlatformTextStyle(includeFontPadding = false),
+)
 
 @Composable
 private fun AddDeviceDialog(onDismiss: () -> Unit, onAdd: (Device) -> Unit) {
