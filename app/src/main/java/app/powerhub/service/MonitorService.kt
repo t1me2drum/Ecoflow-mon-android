@@ -15,6 +15,8 @@ import androidx.core.content.ContextCompat
 import app.powerhub.PowerHubApp
 import app.powerhub.R
 import app.powerhub.data.ConnState
+import app.powerhub.protocol.GridStatus
+import app.powerhub.protocol.gridStatus
 import app.powerhub.ui.MainActivity
 import app.powerhub.widget.BatteryWidget
 import kotlinx.coroutines.CoroutineScope
@@ -114,7 +116,9 @@ class MonitorService : Service() {
                     .put("in", s.inputW ?: 0)
                     .put("out", s.outputW ?: 0)
                     .put("online", repo.snapshots.value[d.sn]?.isOnline(now) == true)
-                    .put("grid", s.gridConnected == true),
+                    .put("grid", s.gridConnected == true)
+                    .put("weak", s.gridStatus(repo.settings.alerts.value.weakGridVolt) == GridStatus.WEAK)
+                    .put("volt", s.acInVolt ?: 0),
             )
         }
         repo.settings.widgetCache = arr.toString()
@@ -134,7 +138,8 @@ class MonitorService : Service() {
         return devices.joinToString(" · ") { d ->
             val s = repo.state(d)
             val soc = s.soc?.let { "$it%" } ?: "—"
-            "${d.name}: $soc ↓${s.inputW ?: 0} ↑${s.outputW ?: 0} Вт"
+            val weak = s.gridStatus(repo.settings.alerts.value.weakGridVolt) == GridStatus.WEAK
+            "${d.name}: $soc ↓${s.inputW ?: 0} ↑${s.outputW ?: 0} Вт" + if (weak) " ⚠${s.acInVolt}В" else ""
         }
     }
 

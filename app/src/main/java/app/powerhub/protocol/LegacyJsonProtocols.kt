@@ -30,7 +30,7 @@ object DeltaMaxProtocol : Delta2Family() {
             acInVolt = acInVolt,
             gridConnected = when {
                 acInVolt == null && acIn == null -> null
-                else -> (acInVolt ?: 0) > 100 || (acIn ?: 0) > 0
+                else -> (acInVolt ?: 0) > 30 || (acIn ?: 0) > 0
             },
             cycles = p.int("bmsMaster.cycles"),
             soh = p.int("bmsMaster.soh"),

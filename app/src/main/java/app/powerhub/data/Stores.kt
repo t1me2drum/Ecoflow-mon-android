@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import app.powerhub.protocol.Device
+import app.powerhub.protocol.DEFAULT_WEAK_GRID_VOLT
 import app.powerhub.protocol.DeviceModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -67,6 +68,7 @@ data class AlertSettings(
     val fullCharge: Boolean = true,
     val grid: Boolean = true,
     val offline: Boolean = true,
+    val weakGridVolt: Int = DEFAULT_WEAK_GRID_VOLT,
 )
 
 class SettingsStore(context: Context) {
@@ -176,6 +178,7 @@ class SettingsStore(context: Context) {
         fullCharge = prefs.getBoolean("alert_full", true),
         grid = prefs.getBoolean("alert_grid", true),
         offline = prefs.getBoolean("alert_offline", true),
+        weakGridVolt = prefs.getInt("weak_grid_volt", DEFAULT_WEAK_GRID_VOLT),
     )
 
     fun saveAlerts(a: AlertSettings) {
@@ -185,6 +188,7 @@ class SettingsStore(context: Context) {
             .putBoolean("alert_full", a.fullCharge)
             .putBoolean("alert_grid", a.grid)
             .putBoolean("alert_offline", a.offline)
+            .putInt("weak_grid_volt", a.weakGridVolt)
             .apply()
         _alerts.value = a
     }

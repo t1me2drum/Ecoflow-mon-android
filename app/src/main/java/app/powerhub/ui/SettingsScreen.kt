@@ -70,9 +70,19 @@ fun SettingsScreen(onBack: () -> Unit, onLoggedOut: () -> Unit) {
             Card {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Сповіщення", style = MaterialTheme.typography.titleSmall)
-                    SwitchRow("Зникло або з'явилося живлення", alerts.grid) {
+                    SwitchRow("Живлення: зникло, з'явилося, слабка напруга", alerts.grid) {
                         repo.settings.saveAlerts(alerts.copy(grid = it))
                     }
+                    Text(
+                        "Слабка мережа — нижче ${alerts.weakGridVolt} В (станція не заряджається)",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Slider(
+                        value = alerts.weakGridVolt.toFloat(),
+                        onValueChange = { repo.settings.saveAlerts(alerts.copy(weakGridVolt = (it / 5).roundToInt() * 5)) },
+                        valueRange = 150f..210f,
+                        steps = 11,
+                    )
                     SwitchRow("Низький заряд", alerts.lowBattery) {
                         repo.settings.saveAlerts(alerts.copy(lowBattery = it))
                     }

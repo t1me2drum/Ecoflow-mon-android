@@ -65,7 +65,7 @@ class Delta3Protocol private constructor(private val maxAcChargeW: Int) : Device
             dischargeRemainMin = validMinutes(p.int("cms_dsg_rem_time") ?: p.int("bms_dsg_rem_time")),
             batteryTempC = p.int("bms_max_cell_temp"),
             acInVolt = acInVolt,
-            gridConnected = p.flag("plug_in_info_ac_in_flag") ?: acInVolt?.let { it > 100 },
+            gridConnected = p.flag("plug_in_info_ac_in_flag") ?: acInVolt?.let { it > 30 },
             cycles = p.int("cycles"),
             soh = p.int("bms_batt_soh"),
         )

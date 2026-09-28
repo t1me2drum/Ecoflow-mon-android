@@ -59,6 +59,9 @@ import app.powerhub.PowerHubApp
 import app.powerhub.data.DeviceSnapshot
 import app.powerhub.protocol.Device
 import app.powerhub.protocol.DeviceModel
+import app.powerhub.protocol.GridStatus
+import app.powerhub.protocol.chargingFromGrid
+import app.powerhub.protocol.gridStatus
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -67,6 +70,7 @@ fun DevicesScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
     val repo = PowerHubApp.repo
     val devices by repo.settings.devices.collectAsStateWithLifecycle()
     val snapshots by repo.snapshots.collectAsStateWithLifecycle()
+    val alerts by repo.settings.alerts.collectAsStateWithLifecycle()
     val conn by repo.connection.collectAsStateWithLifecycle()
     var adding by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<Device?>(null) }
@@ -173,7 +177,7 @@ fun DevicesScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
                     ReorderableItem(reorderState, key = d.sn) { isDragging ->
                         val elevation by animateDpAsState(if (isDragging) 8.dp else 1.dp, label = "drag")
                         DeviceCard(
-                            d, snapshots[d.sn], elevation,
+                            d, snapshots[d.sn], alerts.weakGridVolt, elevation,
                             dragHandle = Modifier.draggableHandle(
                                 onDragStarted = { dragging = true },
                                 onDragStopped = {
@@ -210,6 +214,7 @@ fun DevicesScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
 private fun DeviceCard(
     d: Device,
     snap: DeviceSnapshot?,
+    weakGridVolt: Int,
     elevation: Dp,
     dragHandle: Modifier,
     onClick: () -> Unit,
@@ -226,7 +231,7 @@ private fun DeviceCard(
             elevation = CardDefaults.cardElevation(defaultElevation = elevation),
         ) {
             Row(Modifier.padding(start = 12.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                SocRing(state.soc, online, 56.dp, 6.dp, charging = state.gridConnected == true)
+                SocRing(state.soc, online, 56.dp, 6.dp, charging = state.chargingFromGrid(weakGridVolt))
                 Column(Modifier.padding(start = 12.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Row {
                         Text(
@@ -240,20 +245,26 @@ private fun DeviceCard(
                             modifier = Modifier.alignByBaseline(),
                         )
                     }
+                    val grid = state.gridStatus(weakGridVolt)
                     val status = when {
                         !online -> if (snap == null) "Очікування даних…" else "Не на зв'язку"
+                        grid == GridStatus.WEAK -> "⚠ слабка мережа ${state.acInVolt} В · ↑ ${watts(state.outputW)}"
                         else -> {
-                            val grid = when (state.gridConnected) {
-                                true -> " · мережа ✓"
-                                false -> " · без мережі"
-                                null -> ""
+                            val gridText = when (grid) {
+                                GridStatus.OK -> " · мережа ✓"
+                                GridStatus.NONE -> " · без мережі"
+                                else -> ""
                             }
-                            "↓ ${watts(state.inputW)} · ↑ ${watts(state.outputW)}$grid"
+                            "↓ ${watts(state.inputW)} · ↑ ${watts(state.outputW)}$gridText"
                         }
                     }
                     Text(
                         status, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        color = if (online) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
+                        color = when {
+                            !online -> MaterialTheme.colorScheme.outline
+                            grid == GridStatus.WEAK -> WarningColor
+                            else -> MaterialTheme.colorScheme.onSurface
+                        },
                     )
                 }
                 // Drag starts immediately from the handle; the rest of the card keeps tap / long-press.

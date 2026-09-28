@@ -13,6 +13,8 @@ import app.powerhub.R
 import app.powerhub.data.AlertSettings
 import app.powerhub.protocol.Device
 import app.powerhub.protocol.DeviceState
+import app.powerhub.protocol.GridStatus
+import app.powerhub.protocol.gridStatus
 import app.powerhub.ui.MainActivity
 
 /**
@@ -23,7 +25,7 @@ class AlertEngine(private val context: Context) {
     private class Memory {
         var lowFired = false
         var fullFired = false
-        var grid: Boolean? = null
+        var grid: GridStatus? = null
         var online: Boolean? = null
     }
 
@@ -48,15 +50,25 @@ class AlertEngine(private val context: Context) {
                 m.fullFired = false
             }
 
-            val grid = state.gridConnected
+            // 5 V hysteresis so voltage hovering at the threshold does not flap between weak and ok.
+            val threshold = settings.weakGridVolt + if (m.grid == GridStatus.WEAK) 5 else 0
+            val grid = state.gridStatus(threshold)
             if (grid != null) {
                 val prev = m.grid
                 m.grid = grid
                 if (prev != null && prev != grid && settings.grid) {
-                    if (grid) {
-                        notify(device, 3, "Живлення з'явилося", "${device.name} знову заряджається від мережі")
-                    } else {
-                        notify(device, 3, "Живлення зникло", "${device.name} працює від батареї, заряд $soc%")
+                    val volt = state.acInVolt?.let { "$it В" } ?: "—"
+                    when (grid) {
+                        GridStatus.NONE ->
+                            notify(device, 3, "Живлення зникло", "${device.name} працює від батареї, заряд $soc%")
+                        GridStatus.WEAK ->
+                            notify(device, 3, "Слабка мережа: $volt", "${device.name} не заряджається від мережі, заряд $soc%")
+                        GridStatus.OK ->
+                            if (prev == GridStatus.WEAK) {
+                                notify(device, 3, "Напруга відновилася: $volt", "${device.name} знову заряджається від мережі")
+                            } else {
+                                notify(device, 3, "Живлення з'явилося", "${device.name} знову заряджається від мережі")
+                            }
                     }
                 }
             }

@@ -39,6 +39,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.powerhub.data.ConnState
 
+/** Amber used for "grid present but too weak to charge". */
+val WarningColor = Color(0xFFF2A900)
+
 fun watts(w: Int?): String = w?.let { if (it >= 1000) "%.2f кВт".format(it / 1000.0) else "$it Вт" } ?: "—"
 
 fun minutes(m: Int?): String {

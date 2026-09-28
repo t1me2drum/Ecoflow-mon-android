@@ -28,7 +28,10 @@ import app.powerhub.PowerHubApp
 import app.powerhub.ui.MainActivity
 import org.json.JSONArray
 
-private data class WidgetRow(val name: String, val soc: Int, val inW: Int, val outW: Int, val online: Boolean, val grid: Boolean)
+private data class WidgetRow(
+    val name: String, val soc: Int, val inW: Int, val outW: Int,
+    val online: Boolean, val grid: Boolean, val weak: Boolean, val volt: Int,
+)
 
 class BatteryWidget : GlanceAppWidget() {
 
@@ -45,7 +48,7 @@ class BatteryWidget : GlanceAppWidget() {
             val o = arr.getJSONObject(it)
             WidgetRow(
                 o.getString("name"), o.getInt("soc"), o.getInt("in"), o.getInt("out"),
-                o.getBoolean("online"), o.optBoolean("grid"),
+                o.getBoolean("online"), o.optBoolean("grid"), o.optBoolean("weak"), o.optInt("volt"),
             )
         }
     }.getOrDefault(emptyList())
@@ -79,6 +82,7 @@ class BatteryWidget : GlanceAppWidget() {
                 )
                 val status = when {
                     !r.online -> "не на зв'язку"
+                    r.weak -> "⚠ слабка мережа ${r.volt} В ↑${r.outW} Вт"
                     r.grid -> "мережа ✓ ↓${r.inW} ↑${r.outW} Вт"
                     else -> "батарея ↑${r.outW} Вт"
                 }

@@ -85,6 +85,24 @@ data class DeviceState(
     val soh: Int? = null,
 )
 
+enum class GridStatus { NONE, WEAK, OK }
+
+const val DEFAULT_WEAK_GRID_VOLT = 180
+
+/**
+ * Grid present but below [weakBelowVolt]: the station typically refuses AC input at such
+ * voltage, so it must not be shown as charging.
+ */
+fun DeviceState.gridStatus(weakBelowVolt: Int): GridStatus? = when (gridConnected) {
+    null -> null
+    false -> GridStatus.NONE
+    true -> if (acInVolt != null && acInVolt in 1 until weakBelowVolt) GridStatus.WEAK else GridStatus.OK
+}
+
+/** Charging from the grid only when AC power actually flows in at normal voltage. */
+fun DeviceState.chargingFromGrid(weakBelowVolt: Int): Boolean =
+    gridStatus(weakBelowVolt) == GridStatus.OK && (acInW ?: 0) > 5
+
 /** A message ready to be published to the device's set or get topic. */
 class Outgoing(val payload: ByteArray)
 

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -51,6 +52,9 @@ import app.powerhub.PowerHubApp
 import app.powerhub.protocol.Control
 import app.powerhub.protocol.Device
 import app.powerhub.protocol.DeviceState
+import app.powerhub.protocol.GridStatus
+import app.powerhub.protocol.chargingFromGrid
+import app.powerhub.protocol.gridStatus
 import app.powerhub.protocol.Params
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -94,7 +98,7 @@ fun DeviceScreen(sn: String, onBack: () -> Unit) {
                 }
             }
             when (tab) {
-                0 -> Overview(device, state, online)
+                0 -> Overview(device, state, online, repo.settings.alerts.collectAsStateWithLifecycle().value.weakGridVolt)
                 1 -> Controls(device, params, online, snackbar)
                 2 -> HistoryPane(device)
                 3 -> RawData(params)
@@ -119,13 +123,23 @@ fun DeviceScreen(sn: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun Overview(device: Device, s: DeviceState, online: Boolean) {
+private fun Overview(device: Device, s: DeviceState, online: Boolean, weakGridVolt: Int) {
+    val grid = s.gridStatus(weakGridVolt)
     Column(
         Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            SocRing(s.soc, online, 200.dp, charging = s.gridConnected == true)
+            SocRing(s.soc, online, 200.dp, charging = s.chargingFromGrid(weakGridVolt))
+        }
+        if (online && grid == GridStatus.WEAK) {
+            Card(colors = CardDefaults.cardColors(containerColor = WarningColor.copy(alpha = 0.18f))) {
+                Text(
+                    "⚠ Слабка мережа: ${s.acInVolt} В (поріг $weakGridVolt В). Станція не заряджається від мережі.",
+                    Modifier.padding(12.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
         }
         val charging = (s.inputW ?: 0) > (s.outputW ?: 0)
         val remainText = when {
@@ -147,9 +161,10 @@ private fun Overview(device: Device, s: DeviceState, online: Boolean) {
                 StatRow("Сонце", watts(s.solarW))
                 StatRow(
                     "Стан мережі",
-                    when (s.gridConnected) {
-                        true -> "є" + (s.acInVolt?.let { " ($it В)" } ?: "")
-                        false -> "немає"
+                    when (grid) {
+                        GridStatus.OK -> "є" + (s.acInVolt?.let { " ($it В)" } ?: "")
+                        GridStatus.WEAK -> "слабка (${s.acInVolt} В), заряд не йде"
+                        GridStatus.NONE -> "немає"
                         null -> "—"
                     },
                 )
