@@ -62,6 +62,8 @@ data class Device(
     val model: DeviceModel,
     val imported: Boolean = false,
     val customName: Boolean = false,
+    /** Last name seen in the EcoFlow account; detects renames made in the official app. */
+    val cloudName: String? = null,
 )
 
 enum class TopicKind { DATA, GET_REPLY, SET_REPLY }

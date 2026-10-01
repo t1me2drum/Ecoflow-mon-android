@@ -94,7 +94,16 @@ class MonitorService : Service() {
         if (record) lastRecordedMinute = minute
 
         // Devices push deltas; a periodic snapshot request keeps rarely-sent fields fresh.
-        if (tick++ % 10 == 0) repo.requestAllQuotas()
+        if (tick % 10 == 0) repo.requestAllQuotas()
+
+        // Names, new and removed stations change in the official app (often on a phone),
+        // so a long-running install re-reads the account list every 15 minutes.
+        if (tick % SYNC_EVERY_TICKS == 0 && tick > 0 && repo.hasDeveloperKeys) {
+            runCatching { repo.syncStations() }
+                .onSuccess { if (it.added + it.updated + it.removed > 0) DiagLog.log("sync", "periodic: +${it.added} ~${it.updated} -${it.removed}") }
+                .onFailure { DiagLog.log("sync", "periodic sync failed: ${it.message}") }
+        }
+        tick++
 
         if (now - lastPrune > 24 * 3600_000L) {
             repo.history.prune(now - 30L * 24 * 3600_000L)
@@ -170,6 +179,7 @@ class MonitorService : Service() {
     companion object {
         private const val NOTIFICATION_ID = 1
         private const val TICK_MS = 30_000L
+        private const val SYNC_EVERY_TICKS = 30 // 30 × 30 s = 15 min
 
         fun start(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, MonitorService::class.java))

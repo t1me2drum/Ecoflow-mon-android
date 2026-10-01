@@ -92,6 +92,7 @@ class SettingsStore(context: Context) {
             Device(
                 o.getString("sn"), o.optString("name", o.getString("sn")), model,
                 imported = o.optBoolean("imported"), customName = o.optBoolean("customName"),
+                cloudName = o.optString("cloudName").takeIf { it.isNotEmpty() },
             )
         }
     }
@@ -101,7 +102,8 @@ class SettingsStore(context: Context) {
         list.forEach {
             arr.put(
                 JSONObject().put("sn", it.sn).put("name", it.name).put("model", it.model.name)
-                    .put("imported", it.imported).put("customName", it.customName),
+                    .put("imported", it.imported).put("customName", it.customName)
+                    .put("cloudName", it.cloudName ?: ""),
             )
         }
         prefs.edit().putString("devices", arr.toString()).apply()
@@ -143,33 +145,11 @@ class SettingsStore(context: Context) {
     fun renameDevice(sn: String, name: String) =
         writeDevices(_devices.value.map { if (it.sn == sn) it.copy(name = name, customName = true) else it })
 
-    /** Applies the account's station list; manually added stations are never touched. */
+    /** Applies the account's station list; see [mergeStations] for the naming rule. */
     fun applyCloudList(all: List<Device>): SyncResult {
-        val cloud = all.filterNot { it.sn in _hidden.value }
-        val current = _devices.value
-        val bySn = cloud.associateBy { it.sn }
-        var updated = 0
-        var removed = 0
-        val kept = current.mapNotNull { d ->
-            val c = bySn[d.sn]
-            when {
-                c == null && d.imported -> { removed++; null }
-                c == null -> d
-                else -> {
-                    val next = d.copy(
-                        name = if (d.customName) d.name else c.name,
-                        model = c.model,
-                        imported = true,
-                    )
-                    if (next != d) updated++
-                    next
-                }
-            }
-        }
-        val known = current.map { it.sn }.toSet()
-        val added = cloud.filter { it.sn !in known }
-        writeDevices(kept + added)
-        return SyncResult(added.size, updated, removed)
+        val (list, result) = mergeStations(_devices.value, all, _hidden.value.keys)
+        writeDevices(list)
+        return result
     }
 
     private fun readAlerts() = AlertSettings(
