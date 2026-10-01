@@ -15,6 +15,7 @@ import app.powerhub.protocol.TopicKind
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -69,6 +70,9 @@ class Repository(
     @Volatile private var session: Session? = null
     @Volatile private var link: MqttLink? = null
     private var runJob: Job? = null
+
+    /** When the MQTT link last dropped (or started connecting); null while connected. */
+    @Volatile private var disconnectedSince: Long? = null
     private var subscribedSns = emptySet<String>()
 
     val isLoggedIn: Boolean get() = credentials.load() != null
@@ -162,16 +166,36 @@ class Repository(
                     onMessage = ::onMessage,
                     onConnected = { ok ->
                         _conn.value = if (ok) ConnState.Connected else ConnState.Reconnecting("Зв'язок втрачено")
-                        if (ok) requestAllQuotas()
+                        if (ok) {
+                            disconnectedSince = null
+                            requestAllQuotas()
+                        } else if (disconnectedSince == null) {
+                            disconnectedSince = System.currentTimeMillis()
+                        }
                     },
                     onFatal = { failure.fire(it) },
                 )
                 link = newLink
                 subscribedSns = settings.devices.value.map { it.sn }.toSet()
+                disconnectedSince = System.currentTimeMillis()
                 newLink.connect(subscribedSns.flatMap { topicsFor(s, it) })
                 backoff = 5_000L
-                // Paho reconnects by itself once connected; only a failed first connect comes back here.
-                val reason = failure.await()
+                // Paho reconnects by itself, but always with the MQTT credentials issued at login.
+                // If those stop working it would retry forever, so after a long outage the
+                // watchdog ends this session and the loop logs in again for fresh credentials.
+                val reason = coroutineScope {
+                    val watchdog = launch {
+                        while (true) {
+                            delay(60_000)
+                            val since = disconnectedSince ?: continue
+                            if (System.currentTimeMillis() - since > RELOGIN_AFTER_MS) {
+                                failure.fire("MQTT не підключається понад 10 хв, повторний вхід")
+                                break
+                            }
+                        }
+                    }
+                    failure.await().also { watchdog.cancel() }
+                }
                 newLink.close()
                 link = null
                 _conn.value = ConnState.Reconnecting(reason)
@@ -282,5 +306,6 @@ class Repository(
 
     private companion object {
         const val TAG = "Repository"
+        const val RELOGIN_AFTER_MS = 10 * 60_000L
     }
 }

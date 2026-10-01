@@ -15,6 +15,7 @@ import androidx.core.content.ContextCompat
 import app.powerhub.PowerHubApp
 import app.powerhub.R
 import app.powerhub.data.ConnState
+import app.powerhub.data.stationReachable
 import app.powerhub.diag.DiagLog
 import app.powerhub.protocol.GridStatus
 import app.powerhub.protocol.gridStatus
@@ -44,6 +45,10 @@ class MonitorService : Service() {
     private var lastPrune = 0L
     private var tick = 0
 
+    // PowerHub's own link to the cloud: a station can only be judged offline while this is up.
+    @Volatile private var cloudUpSince: Long? = null
+    @Volatile private var cloudDownSince: Long? = System.currentTimeMillis()
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -55,6 +60,18 @@ class MonitorService : Service() {
         )
         repo.start()
 
+        scope.launch {
+            repo.connection.map { it is ConnState.Connected }.distinctUntilChanged().collect { up ->
+                val now = System.currentTimeMillis()
+                if (up) {
+                    cloudUpSince = now
+                    cloudDownSince = null
+                } else {
+                    cloudUpSince = null
+                    if (cloudDownSince == null) cloudDownSince = now
+                }
+            }
+        }
         scope.launch {
             repo.connection.map { it::class }.distinctUntilChanged().collect { refreshNotification() }
         }
@@ -84,12 +101,14 @@ class MonitorService : Service() {
         val alertSettings = repo.settings.alerts.value
         val record = minute != lastRecordedMinute
 
+        alerts.evaluateCloud(cloudDownSince, now, alertSettings)
         for (device in devices) {
             val snap = snapshots[device.sn]
-            val online = snap?.isOnline(now) == true
+            val lastSeen = snap?.lastSeen ?: 0L
+            val reachable = stationReachable(lastSeen, now, cloudUpSince)
             val state = repo.state(device)
-            if (record && online) repo.history.insert(device.sn, minute * 60_000L, state)
-            alerts.evaluate(device, state, online, alertSettings)
+            if (record && reachable == true) repo.history.insert(device.sn, minute * 60_000L, state)
+            alerts.evaluate(device, state, reachable, lastSeen, now, alertSettings)
         }
         if (record) lastRecordedMinute = minute
 

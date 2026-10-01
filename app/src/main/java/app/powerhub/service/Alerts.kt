@@ -11,6 +11,7 @@ import androidx.core.content.ContextCompat
 import app.powerhub.PowerHubApp
 import app.powerhub.R
 import app.powerhub.data.AlertSettings
+import app.powerhub.data.durationText
 import app.powerhub.protocol.Device
 import app.powerhub.protocol.DeviceState
 import app.powerhub.protocol.GridStatus
@@ -27,15 +28,25 @@ class AlertEngine(private val context: Context) {
         var fullFired = false
         var grid: GridStatus? = null
         var online: Boolean? = null
+        /** Last data time when the station went silent; for the "back online" duration. */
+        var offlineSince: Long? = null
+        /** When the grid disappeared; for the "power is back" duration. */
+        var gridLostAt: Long? = null
     }
+
+    private var cloudAlertFired = false
 
     private val memory = HashMap<String, Memory>()
 
-    fun evaluate(device: Device, state: DeviceState, online: Boolean, settings: AlertSettings) {
+    /**
+     * [reachable] comes from [stationReachable]: `null` means PowerHub cannot tell (it is offline
+     * from the cloud itself), so no reachability alert fires and the previous state is kept.
+     */
+    fun evaluate(device: Device, state: DeviceState, reachable: Boolean?, lastSeen: Long, now: Long, settings: AlertSettings) {
         val m = memory.getOrPut(device.sn) { Memory() }
         val soc = state.soc
 
-        if (online && soc != null) {
+        if (reachable == true && soc != null) {
             if (soc <= settings.lowBatteryPercent && !m.lowFired) {
                 m.lowFired = true
                 if (settings.lowBattery) notify(device, 1, "Низький заряд: $soc%", "${device.name} скоро розрядиться")
@@ -56,6 +67,7 @@ class AlertEngine(private val context: Context) {
             if (grid != null) {
                 val prev = m.grid
                 m.grid = grid
+                if (grid == GridStatus.NONE && prev != GridStatus.NONE) m.gridLostAt = now
                 if (prev != null && prev != grid && settings.grid) {
                     val volt = state.acInVolt?.let { "$it В" } ?: "—"
                     when (grid) {
@@ -67,21 +79,47 @@ class AlertEngine(private val context: Context) {
                             if (prev == GridStatus.WEAK) {
                                 notify(device, 3, "Напруга відновилася: $volt", "${device.name}: мережа в нормі, заряд $soc%")
                             } else {
-                                notify(device, 3, "Живлення з'явилося", "${device.name}: мережа $volt, заряд $soc%")
+                                val outage = m.gridLostAt?.let { " · не було ${durationText(now - it)}" } ?: ""
+                                notify(device, 3, "Живлення з'явилося$outage", "${device.name}: мережа $volt, заряд $soc%")
                             }
                     }
                 }
             }
         }
 
+        if (reachable == null) return
         val prevOnline = m.online
-        m.online = online
-        if (prevOnline == true && !online && settings.offline) {
-            notify(device, 4, "Станція не на зв'язку", "${device.name} не надсилає дані понад 3 хв")
+        m.online = reachable
+        if (prevOnline == true && !reachable) {
+            m.offlineSince = lastSeen.takeIf { it > 0 } ?: now
+            if (settings.offline) notify(device, 4, "Станція не на зв'язку", "${device.name} не надсилає дані понад 3 хв")
+        } else if (prevOnline == false && reachable) {
+            val gone = m.offlineSince?.let { " · не було ${durationText(now - it)}" } ?: ""
+            m.offlineSince = null
+            if (settings.offline) notify(device, 4, "Станція знову на зв'язку$gone", "${device.name}: заряд ${soc ?: "—"}%")
         }
     }
 
-    private fun notify(device: Device, kind: Int, title: String, text: String) {
+    /**
+     * One alert for PowerHub's own link to the EcoFlow cloud instead of one per station.
+     * [downSince] is null while connected.
+     */
+    fun evaluateCloud(downSince: Long?, now: Long, settings: AlertSettings) {
+        if (downSince != null && now - downSince >= CLOUD_ALERT_AFTER_MS && !cloudAlertFired) {
+            cloudAlertFired = true
+            if (settings.offline) {
+                notifyRaw(CLOUD_NOTIFICATION_ID, "PowerHub без зв'язку з хмарою", "Дані станцій не оновлюються. Перевірте інтернет на цьому пристрої.")
+            }
+        } else if (downSince == null && cloudAlertFired) {
+            cloudAlertFired = false
+            if (settings.offline) notifyRaw(CLOUD_NOTIFICATION_ID, "Зв'язок з хмарою відновлено", "Дані станцій знову оновлюються")
+        }
+    }
+
+    private fun notify(device: Device, kind: Int, title: String, text: String) =
+        notifyRaw(device.sn.hashCode() * 10 + kind, title, text)
+
+    private fun notifyRaw(id: Int, title: String, text: String) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) return
@@ -96,6 +134,11 @@ class AlertEngine(private val context: Context) {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
-        NotificationManagerCompat.from(context).notify(device.sn.hashCode() * 10 + kind, n)
+        NotificationManagerCompat.from(context).notify(id, n)
+    }
+
+    private companion object {
+        const val CLOUD_ALERT_AFTER_MS = 3 * 60_000L
+        const val CLOUD_NOTIFICATION_ID = 9_000
     }
 }

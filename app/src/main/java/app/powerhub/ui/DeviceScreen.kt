@@ -45,10 +45,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.powerhub.PowerHubApp
+import app.powerhub.data.durationText
 import app.powerhub.protocol.Control
 import app.powerhub.protocol.Device
 import app.powerhub.protocol.DeviceState
@@ -99,7 +101,10 @@ fun DeviceScreen(sn: String, onBack: () -> Unit) {
                 }
             }
             when (tab) {
-                0 -> Overview(device, state, online, repo.settings.alerts.collectAsStateWithLifecycle().value.weakGridVolt)
+                0 -> Overview(
+                    device, state, online, snap?.lastSeen ?: 0L,
+                    repo.settings.alerts.collectAsStateWithLifecycle().value.weakGridVolt,
+                )
                 1 -> Controls(device, params, online, snackbar)
                 2 -> HistoryPane(device)
                 3 -> RawData(params)
@@ -124,12 +129,28 @@ fun DeviceScreen(sn: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun Overview(device: Device, s: DeviceState, online: Boolean, weakGridVolt: Int) {
+private fun Overview(device: Device, s: DeviceState, online: Boolean, lastSeen: Long, weakGridVolt: Int) {
     val grid = s.gridStatus(weakGridVolt)
     Column(
         Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // Offline: say how old the figures are and dim them, so they are not read as live.
+        if (!online && lastSeen > 0) {
+            val at = java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale.getDefault()).format(lastSeen)
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                Text(
+                    "Станція не на зв'язку. Дані станом на $at (${durationText(System.currentTimeMillis() - lastSeen)} тому) " +
+                        "і можуть бути застарілими.",
+                    Modifier.padding(12.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+        Column(
+            Modifier.alpha(if (online) 1f else 0.5f),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
             SocRing(s.soc, online, 200.dp, charging = s.chargingFromGrid(weakGridVolt))
         }
@@ -183,6 +204,7 @@ private fun Overview(device: Device, s: DeviceState, online: Boolean, weakGridVo
                 StatRow("Модель", device.model.title)
                 StatRow("Серійний номер", device.sn)
             }
+        }
         }
     }
 }
