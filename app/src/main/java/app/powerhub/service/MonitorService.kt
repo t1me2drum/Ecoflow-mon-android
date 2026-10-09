@@ -15,7 +15,6 @@ import androidx.core.content.ContextCompat
 import app.powerhub.PowerHubApp
 import app.powerhub.R
 import app.powerhub.data.ConnState
-import app.powerhub.data.stationReachable
 import app.powerhub.diag.DiagLog
 import app.powerhub.protocol.GridStatus
 import app.powerhub.protocol.gridStatus
@@ -45,10 +44,6 @@ class MonitorService : Service() {
     private var lastPrune = 0L
     private var tick = 0
 
-    // PowerHub's own link to the cloud: a station can only be judged offline while this is up.
-    @Volatile private var cloudUpSince: Long? = null
-    @Volatile private var cloudDownSince: Long? = System.currentTimeMillis()
-
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -60,18 +55,6 @@ class MonitorService : Service() {
         )
         repo.start()
 
-        scope.launch {
-            repo.connection.map { it is ConnState.Connected }.distinctUntilChanged().collect { up ->
-                val now = System.currentTimeMillis()
-                if (up) {
-                    cloudUpSince = now
-                    cloudDownSince = null
-                } else {
-                    cloudUpSince = null
-                    if (cloudDownSince == null) cloudDownSince = now
-                }
-            }
-        }
         scope.launch {
             repo.connection.map { it::class }.distinctUntilChanged().collect { refreshNotification() }
         }
@@ -101,11 +84,11 @@ class MonitorService : Service() {
         val alertSettings = repo.settings.alerts.value
         val record = minute != lastRecordedMinute
 
-        alerts.evaluateCloud(cloudDownSince, now, alertSettings)
+        alerts.evaluateCloud(repo.cloudDownSince, now, alertSettings)
         for (device in devices) {
             val snap = snapshots[device.sn]
             val lastSeen = snap?.lastSeen ?: 0L
-            val reachable = stationReachable(lastSeen, now, cloudUpSince)
+            val reachable = repo.reachable(device.sn, now)
             val state = repo.state(device)
             if (record && reachable == true) repo.history.insert(device.sn, minute * 60_000L, state)
             alerts.evaluate(device, state, reachable, lastSeen, now, alertSettings)
@@ -144,7 +127,8 @@ class MonitorService : Service() {
                     .put("soc", s.soc ?: -1)
                     .put("in", s.inputW ?: 0)
                     .put("out", s.outputW ?: 0)
-                    .put("online", repo.snapshots.value[d.sn]?.isOnline(now) == true)
+                    .put("online", repo.reachable(d.sn, now) == true)
+                    .put("unknown", repo.reachable(d.sn, now) == null)
                     .put("grid", s.gridConnected == true)
                     .put("weak", s.gridStatus(repo.settings.alerts.value.weakGridVolt) == GridStatus.WEAK)
                     .put("volt", s.acInVolt ?: 0),

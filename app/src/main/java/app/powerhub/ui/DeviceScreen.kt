@@ -72,7 +72,8 @@ fun DeviceScreen(sn: String, onBack: () -> Unit) {
     val snap = snapshots[sn]
     val params = snap?.params.orEmpty()
     val state = device.model.protocol.state(params)
-    val online = snap?.isOnline() == true
+    val reachable = repo.reachable(sn)
+    val online = reachable == true
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var renaming by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
@@ -102,7 +103,7 @@ fun DeviceScreen(sn: String, onBack: () -> Unit) {
             }
             when (tab) {
                 0 -> Overview(
-                    device, state, online, snap?.lastSeen ?: 0L,
+                    device, state, reachable, snap?.lastSeen ?: 0L,
                     repo.settings.alerts.collectAsStateWithLifecycle().value.weakGridVolt,
                 )
                 1 -> Controls(device, params, online, snackbar)
@@ -129,7 +130,8 @@ fun DeviceScreen(sn: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun Overview(device: Device, s: DeviceState, online: Boolean, lastSeen: Long, weakGridVolt: Int) {
+private fun Overview(device: Device, s: DeviceState, reachable: Boolean?, lastSeen: Long, weakGridVolt: Int) {
+    val online = reachable == true
     val grid = s.gridStatus(weakGridVolt)
     Column(
         Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
@@ -140,7 +142,8 @@ private fun Overview(device: Device, s: DeviceState, online: Boolean, lastSeen: 
             val at = java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale.getDefault()).format(lastSeen)
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
                 Text(
-                    "Станція не на зв'язку. Дані станом на $at (${durationText(System.currentTimeMillis() - lastSeen)} тому) " +
+                    (if (reachable == false) "Станція не на зв'язку." else "PowerHub не має зв'язку з хмарою.") +
+                        " Дані станом на $at (${durationText(System.currentTimeMillis() - lastSeen)} тому) " +
                         "і можуть бути застарілими.",
                     Modifier.padding(12.dp),
                     style = MaterialTheme.typography.bodyMedium,
@@ -152,7 +155,7 @@ private fun Overview(device: Device, s: DeviceState, online: Boolean, lastSeen: 
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            SocRing(s.soc, online, 200.dp, charging = s.chargingFromGrid(weakGridVolt))
+            SocRing(s.soc, online, 200.dp, charging = s.chargingFromGrid(weakGridVolt), offlineLabel = reachable == false)
         }
         if (online && grid == GridStatus.WEAK) {
             Card(colors = CardDefaults.cardColors(containerColor = WarningColor.copy(alpha = 0.18f))) {
@@ -242,7 +245,7 @@ private fun Controls(device: Device, params: Params, online: Boolean, snackbar: 
     ) {
         if (!online) {
             Text(
-                "Станція не на зв'язку — команди можуть не дійти.",
+                "Немає свіжих даних від станції — команди можуть не дійти.",
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
             )

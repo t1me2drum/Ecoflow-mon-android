@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.powerhub.data.ConnState
+import app.powerhub.data.durationText
 
 /** Amber used for "grid present but too weak to charge". */
 val WarningColor = Color(0xFFF2A900)
@@ -55,19 +56,14 @@ fun flowText(flow: app.powerhub.protocol.BatteryFlow): String = when (flow) {
 
 fun watts(w: Int?): String = w?.let { if (it >= 1000) "%.2f кВт".format(it / 1000.0) else "$it Вт" } ?: "—"
 
-fun minutes(m: Int?): String {
-    if (m == null) return "—"
-    val h = m / 60
-    val mm = m % 60
-    return if (h > 0) "$h год $mm хв" else "$mm хв"
-}
+fun minutes(m: Int?): String = m?.let { durationText(it * 60_000L) } ?: "—"
 
 /**
  * Battery ring. When [charging] (station on grid power) a bright segment runs along the filled
  * arc and a bolt pulses above the percentage; at 100% only the bolt stays.
  */
 @Composable
-fun SocRing(soc: Int?, online: Boolean, size: Dp, stroke: Dp = 12.dp, charging: Boolean = false) {
+fun SocRing(soc: Int?, online: Boolean, size: Dp, stroke: Dp = 12.dp, charging: Boolean = false, offlineLabel: Boolean = !online) {
     val track = MaterialTheme.colorScheme.surfaceVariant
     val color = when {
         !online -> MaterialTheme.colorScheme.outline
@@ -127,7 +123,7 @@ fun SocRing(soc: Int?, online: Boolean, size: Dp, stroke: Dp = 12.dp, charging: 
                 fontSize = (size.value / 4.2f).sp,
                 fontWeight = FontWeight.Bold,
             )
-            if (!online) Text("офлайн", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+            if (offlineLabel) Text("офлайн", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
         }
     }
 }

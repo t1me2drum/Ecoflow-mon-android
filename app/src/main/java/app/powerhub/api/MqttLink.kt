@@ -107,8 +107,4 @@ class MqttLink(
         runCatching { if (client.isConnected) client.disconnect().waitForCompletion(3000) }
         runCatching { client.close() }
     }
-
-    private companion object {
-        const val TAG = "MqttLink"
-    }
 }

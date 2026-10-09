@@ -1,6 +1,5 @@
 package app.powerhub.data
 
-import android.util.Log
 import app.powerhub.api.EcoflowCloud
 import app.powerhub.api.EcoflowException
 import app.powerhub.api.EcoflowOpenApi
@@ -12,6 +11,7 @@ import app.powerhub.protocol.Device
 import app.powerhub.protocol.DeviceState
 import app.powerhub.protocol.Params
 import app.powerhub.protocol.TopicKind
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -36,8 +36,6 @@ data class DeviceSnapshot(
     val params: Params = emptyMap(),
     val lastSeen: Long = 0L,
 ) {
-    fun isOnline(now: Long = System.currentTimeMillis()) = lastSeen > 0 && now - lastSeen < OFFLINE_AFTER_MS
-
     companion object {
         const val OFFLINE_AFTER_MS = 3 * 60_000L
     }
@@ -59,9 +57,29 @@ class Repository(
     private val _conn = MutableStateFlow<ConnState>(ConnState.Idle)
     val connection: StateFlow<ConnState> = _conn.asStateFlow()
 
+    /** When the current cloud connection came up; null while PowerHub is not connected. */
+    @Volatile var cloudUpSince: Long? = null
+        private set
+
+    /** When PowerHub lost (or has not yet made) its cloud connection; null while connected. */
+    @Volatile var cloudDownSince: Long? = System.currentTimeMillis()
+        private set
+
     init {
-        // Every connection state change goes to the diagnostic log (reasons never contain secrets).
-        scope.launch { connection.collect { DiagLog.log("conn", it.toString()) } }
+        scope.launch {
+            connection.collect {
+                // Reasons never contain secrets.
+                DiagLog.log("conn", it.toString())
+                val now = System.currentTimeMillis()
+                if (it is ConnState.Connected) {
+                    if (cloudUpSince == null) cloudUpSince = now
+                    cloudDownSince = null
+                } else {
+                    cloudUpSince = null
+                    if (cloudDownSince == null) cloudDownSince = now
+                }
+            }
+        }
     }
 
     private val _snapshots = MutableStateFlow<Map<String, DeviceSnapshot>>(emptyMap())
@@ -160,7 +178,7 @@ class Repository(
                 val s = cloud.login(c.apiHost, c.email, c.password)
                 val mqtt = cloud.mqttCredentials(c.apiHost, s)
                 session = s
-                val failure = CompletableSignal()
+                val failure = CompletableDeferred<String>()
                 val newLink = MqttLink(
                     mqtt, s.userId,
                     onMessage = ::onMessage,
@@ -173,7 +191,7 @@ class Repository(
                             disconnectedSince = System.currentTimeMillis()
                         }
                     },
-                    onFatal = { failure.fire(it) },
+                    onFatal = { failure.complete(it) },
                 )
                 link = newLink
                 subscribedSns = settings.devices.value.map { it.sn }.toSet()
@@ -189,7 +207,7 @@ class Repository(
                             delay(60_000)
                             val since = disconnectedSince ?: continue
                             if (System.currentTimeMillis() - since > RELOGIN_AFTER_MS) {
-                                failure.fire("MQTT не підключається понад 10 хв, повторний вхід")
+                                failure.complete("MQTT не підключається понад 10 хв, повторний вхід")
                                 break
                             }
                         }
@@ -262,6 +280,10 @@ class Repository(
         }
     }
 
+    /** Station reachability as the whole app sees it (screens, widget, alerts); see [stationReachable]. */
+    fun reachable(sn: String, now: Long = System.currentTimeMillis()): Boolean? =
+        stationReachable(_snapshots.value[sn]?.lastSeen ?: 0L, now, cloudUpSince)
+
     fun state(device: Device): DeviceState =
         device.model.protocol.state(_snapshots.value[device.sn]?.params.orEmpty())
 
@@ -298,14 +320,7 @@ class Repository(
     fun choose(device: Device, c: Control.Choice, v: Int) =
         send(device) { p -> c.command(v, p).payload to c.optimistic(v) }
 
-    private class CompletableSignal {
-        private val deferred = kotlinx.coroutines.CompletableDeferred<String>()
-        fun fire(reason: String) { deferred.complete(reason) }
-        suspend fun await(): String = deferred.await()
-    }
-
     private companion object {
-        const val TAG = "Repository"
         const val RELOGIN_AFTER_MS = 10 * 60_000L
     }
 }

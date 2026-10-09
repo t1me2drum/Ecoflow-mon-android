@@ -137,7 +137,7 @@ fun DevicesScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
                                 onClick = {
                                     sortMenu = false
                                     // Stable sort: relative order inside each group is preserved.
-                                    applyOrder(ordered.sortedByDescending { snapshots[it.sn]?.isOnline() == true })
+                                    applyOrder(ordered.sortedByDescending { repo.reachable(it.sn) == true })
                                 },
                             )
                             DropdownMenuItem(
@@ -230,7 +230,8 @@ private fun DeviceCard(
     onRemove: () -> Unit,
 ) {
     val state = d.model.protocol.state(snap?.params.orEmpty())
-    val online = snap?.isOnline() == true
+    val reachable = PowerHubApp.repo.reachable(d.sn)
+    val online = reachable == true
     var menu by remember { mutableStateOf(false) }
 
     Box {
@@ -239,7 +240,10 @@ private fun DeviceCard(
             elevation = CardDefaults.cardElevation(defaultElevation = elevation),
         ) {
             Row(Modifier.padding(start = 12.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                SocRing(state.soc, online, 56.dp, 6.dp, charging = state.chargingFromGrid(weakGridVolt))
+                SocRing(
+                    state.soc, online, 56.dp, 6.dp,
+                    charging = state.chargingFromGrid(weakGridVolt), offlineLabel = reachable == false,
+                )
                 Column(Modifier.padding(start = 12.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Row {
                         Text(
@@ -257,7 +261,11 @@ private fun DeviceCard(
                     val grid = state.gridStatus(weakGridVolt)
                     if (!online) {
                         Text(
-                            if (snap == null) "Очікування даних…" else "Не на зв'язку",
+                            when {
+                                snap == null -> "Очікування даних…"
+                                reachable == false -> "Не на зв'язку"
+                                else -> "Немає зв'язку з хмарою"
+                            },
                             style = cardLineStyle(),
                             color = MaterialTheme.colorScheme.outline,
                         )
