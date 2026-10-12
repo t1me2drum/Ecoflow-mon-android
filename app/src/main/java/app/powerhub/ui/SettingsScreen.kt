@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.content.Intent
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.pm.PackageInfoCompat
 import app.powerhub.PowerHubApp
 import app.powerhub.diag.DiagLog
 import app.powerhub.data.DeveloperKeys
@@ -127,6 +128,18 @@ fun SettingsScreen(onBack: () -> Unit, onLoggedOut: () -> Unit) {
                 onClick = { repo.logout(); onLoggedOut() },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Вийти з облікового запису") }
+            val context = LocalContext.current
+            val version = remember {
+                runCatching { context.packageManager.getPackageInfo(context.packageName, 0) }
+                    .map { "PowerHub ${it.versionName} (${PackageInfoCompat.getLongVersionCode(it)})" }
+                    .getOrDefault("PowerHub")
+            }
+            Text(
+                version,
+                Modifier.align(Alignment.CenterHorizontally),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

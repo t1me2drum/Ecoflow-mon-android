@@ -13,8 +13,8 @@ android {
         applicationId = "app.powerhub"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "0.9.0"
+        versionCode = 17
+        versionName = "0.9.1"
     }
 
     // CI signs with a persistent key (GitHub secrets) so new APKs install over old ones.
