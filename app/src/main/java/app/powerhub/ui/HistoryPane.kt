@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +34,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import app.powerhub.PowerHubApp
 import app.powerhub.data.Sample
@@ -81,7 +85,7 @@ fun HistoryPane(device: Device) {
         val secondary = MaterialTheme.colorScheme.tertiary
         val solar = Color(0xFFF2A900)
 
-        ChartCard("Рівень заряду, %", samples, listOf(Series("Заряд", primary) { it.soc }), fixedMax = 100f)
+        ChartCard("Рівень заряду, %", samples, listOf(Series("Заряд", primary) { it.soc }), fixedMax = 100f, format = { "$it%" })
         ChartCard(
             "Потужність, Вт", samples,
             listOf(
@@ -122,12 +126,26 @@ private fun EnergyRow(label: String, wh: Double) {
 private class Series(val name: String, val color: Color, val value: (Sample) -> Int?)
 
 @Composable
-private fun ChartCard(title: String, samples: List<Sample>, series: List<Series>, fixedMax: Float? = null) {
+private fun ChartCard(
+    title: String,
+    samples: List<Sample>,
+    series: List<Series>,
+    fixedMax: Float? = null,
+    format: (Int) -> String = ::watts,
+) {
     val grid = MaterialTheme.colorScheme.outlineVariant
     val t0 = samples.first().ts
     val t1 = samples.last().ts
     val maxValue = fixedMax ?: (samples.maxOf { s -> series.maxOf { (it.value(s) ?: 0) } }.toFloat() * 1.1f).coerceAtLeast(10f)
     val fmt = SimpleDateFormat(if (t1 - t0 > 36 * 3600_000L) "dd.MM" else "HH:mm", Locale.getDefault())
+    val pointFmt = SimpleDateFormat(if (t1 - t0 > 20 * 3600_000L) "dd.MM HH:mm" else "HH:mm", Locale.getDefault())
+    val span = (t1 - t0).coerceAtLeast(1L)
+
+    // Pointer x over the chart: mouse hover (emulator, desktop) or touch; the readout shows the nearest sample.
+    var pointerX by remember { mutableStateOf<Float?>(null) }
+    var chartWidth by remember { mutableFloatStateOf(1f) }
+    val selected = pointerX?.let { nearestSample(samples, t0 + (it / chartWidth * span).toLong()) }
+    val cursor = MaterialTheme.colorScheme.onSurfaceVariant
 
     Card {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -135,14 +153,41 @@ private fun ChartCard(title: String, samples: List<Sample>, series: List<Series>
                 Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                 Text("макс ${maxValue.toInt()}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Canvas(Modifier.fillMaxWidth().height(180.dp)) {
+            // Fixed-height readout line, so the chart doesn't jump when the pointer enters or leaves.
+            Row(Modifier.height(20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (selected != null) {
+                    Text(pointFmt.format(Date(selected.ts)), style = MaterialTheme.typography.labelMedium)
+                    series.forEach { s ->
+                        Text(
+                            (if (series.size > 1) "${s.name} " else "") + (s.value(selected)?.let(format) ?: "—"),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = s.color,
+                        )
+                    }
+                } else {
+                    Text("Наведіть або торкніться графіка", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Canvas(
+                Modifier.fillMaxWidth().height(180.dp)
+                    .onSizeChanged { chartWidth = it.width.toFloat().coerceAtLeast(1f) }
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val e = awaitPointerEvent()
+                                val c = e.changes.firstOrNull() ?: continue
+                                // Mouse leaving clears the readout; a finger lifted leaves the last point shown.
+                                pointerX = if (e.type == PointerEventType.Exit) null else c.position.x.coerceIn(0f, chartWidth)
+                            }
+                        }
+                    },
+            ) {
                 val w = size.width
                 val h = size.height
                 for (i in 0..4) {
                     val y = h * i / 4
                     drawLine(grid, Offset(0f, y), Offset(w, y), 1f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)))
                 }
-                val span = (t1 - t0).coerceAtLeast(1L).toFloat()
                 for (s in series) {
                     val path = Path()
                     var prevTs = Long.MIN_VALUE
@@ -153,12 +198,20 @@ private fun ChartCard(title: String, samples: List<Sample>, series: List<Series>
                         if (v == null || sample.ts - prevTs > 5 * 60_000L) drawing = false
                         prevTs = sample.ts
                         if (v == null) continue
-                        val x = (sample.ts - t0) / span * w
+                        val x = (sample.ts - t0).toFloat() / span * w
                         val y = h - (v / maxValue).coerceIn(0f, 1f) * h
                         if (drawing) path.lineTo(x, y) else path.moveTo(x, y)
                         drawing = true
                     }
                     drawPath(path, s.color, style = Stroke(width = 2.dp.toPx()))
+                }
+                if (selected != null) {
+                    val x = (selected.ts - t0).toFloat() / span * w
+                    drawLine(cursor, Offset(x, 0f), Offset(x, h), 1.dp.toPx())
+                    for (s in series) {
+                        val v = s.value(selected) ?: continue
+                        drawCircle(s.color, 4.dp.toPx(), Offset(x, h - (v / maxValue).coerceIn(0f, 1f) * h))
+                    }
                 }
             }
             Row {
@@ -177,4 +230,12 @@ private fun ChartCard(title: String, samples: List<Sample>, series: List<Series>
             }
         }
     }
+}
+
+/** The sample closest in time to [ts]; [samples] are sorted by ts. */
+private fun nearestSample(samples: List<Sample>, ts: Long): Sample {
+    val i = samples.binarySearch { it.ts.compareTo(ts) }
+    if (i >= 0) return samples[i]
+    val at = -i - 1
+    return listOfNotNull(samples.getOrNull(at - 1), samples.getOrNull(at)).minBy { kotlin.math.abs(it.ts - ts) }
 }
