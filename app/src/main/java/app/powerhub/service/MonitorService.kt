@@ -96,7 +96,8 @@ class MonitorService : Service() {
         if (record) lastRecordedMinute = minute
 
         // Devices push deltas; a periodic snapshot request keeps rarely-sent fields fresh.
-        if (tick % 10 == 0) repo.requestAllQuotas()
+        if (tick % 10 == 0) repo.requestAllQuotas() else repo.probeSilent(now)
+        if (tick % 20 == 0 && tick > 0) repo.gapReport().forEach { DiagLog.log("gaps", it) }
 
         // Names, new and removed stations change in the official app (often on a phone),
         // so a long-running install re-reads the account list every 15 minutes.

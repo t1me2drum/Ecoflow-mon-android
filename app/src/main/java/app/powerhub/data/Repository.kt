@@ -9,6 +9,7 @@ import app.powerhub.diag.DiagLog
 import app.powerhub.protocol.Control
 import app.powerhub.protocol.Device
 import app.powerhub.protocol.DeviceState
+import app.powerhub.protocol.JsonMessages
 import app.powerhub.protocol.Params
 import app.powerhub.protocol.TopicKind
 import kotlinx.coroutines.CompletableDeferred
@@ -35,9 +36,14 @@ sealed interface ConnState {
 data class DeviceSnapshot(
     val params: Params = emptyMap(),
     val lastSeen: Long = 0L,
+    /** When the cloud last said the station is offline (latestQuotas reply or Developer API); 0 if never. */
+    val offlineReportedAt: Long = 0L,
 ) {
     companion object {
         const val OFFLINE_AFTER_MS = 3 * 60_000L
+
+        /** A station silent this long gets a direct snapshot request. */
+        const val PROBE_AFTER_MS = 60_000L
     }
 }
 
@@ -93,6 +99,13 @@ class Repository(
     @Volatile private var disconnectedSince: Long? = null
     private var subscribedSns = emptySet<String>()
 
+    /** Last probe per station, so a silent station is asked at most once per [DeviceSnapshot.PROBE_AFTER_MS]. */
+    private val lastProbe = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /** Intervals between data pushes per station, summarized into the diagnostic log; see [gapReport]. */
+    private class GapStats(var last: Long = 0L, var count: Int = 0, var sum: Long = 0L, var max: Long = 0L)
+    private val gaps = HashMap<String, GapStats>()
+
     val isLoggedIn: Boolean get() = credentials.load() != null
 
     /** Validates credentials against the cloud, then stores them. */
@@ -119,6 +132,7 @@ class Repository(
         keys ?: throw EcoflowException("Ключі Developer API не задано")
         val host = credentials.load()?.apiHost ?: API_HOSTS[0].first
         val cloudDevices = openApi.listDevices(keys.accessKey, keys.secretKey, host)
+        cloudDevices.forEach { applyCloudStatus(it.sn, it.online, "Developer API") }
         val unsupported = ArrayList<String>()
         val supported = cloudDevices.mapNotNull { c ->
             val model = app.powerhub.protocol.DeviceModel.detect(c.sn, c.productName)
@@ -264,6 +278,13 @@ class Repository(
             else -> return
         }
         val device = settings.devices.value.find { it.sn == sn } ?: return
+        if (kind == TopicKind.DATA) recordGap(sn)
+        val cloudOnline = if (kind == TopicKind.GET_REPLY) JsonMessages.latestQuotasOnline(payload) else null
+        if (cloudOnline == false) {
+            // The cloud answered on the station's behalf: it is offline, and this reply is not a sign of life.
+            applyCloudStatus(sn, false, "latestQuotas")
+            return
+        }
         val parsed = try {
             device.model.protocol.parse(kind, payload)
         } catch (e: Exception) {
@@ -276,13 +297,63 @@ class Repository(
             val old = all[sn] ?: DeviceSnapshot()
             val params = if (parsed.isEmpty()) old.params else old.params + parsed
             // Any traffic from the device proves it is online, even frames we can't decode.
-            all + (sn to DeviceSnapshot(params, System.currentTimeMillis()))
+            all + (sn to old.copy(params = params, lastSeen = System.currentTimeMillis()))
+        }
+    }
+
+    /** An explicit online/offline verdict from the cloud; "online" counts as a sign of life. */
+    private fun applyCloudStatus(sn: String, online: Boolean, source: String) {
+        if (settings.devices.value.none { it.sn == sn }) return
+        val now = System.currentTimeMillis()
+        val old = _snapshots.value[sn] ?: DeviceSnapshot()
+        if (!online && old.offlineReportedAt <= old.lastSeen) DiagLog.log("status", "$sn offline ($source)")
+        _snapshots.update { all ->
+            val cur = all[sn] ?: DeviceSnapshot()
+            all + (sn to if (online) cur.copy(lastSeen = now) else cur.copy(offlineReportedAt = now))
+        }
+    }
+
+    private fun recordGap(sn: String) = synchronized(gaps) {
+        val now = System.currentTimeMillis()
+        val g = gaps.getOrPut(sn) { GapStats() }
+        if (g.last > 0) {
+            val gap = now - g.last
+            g.count++
+            g.sum += gap
+            if (gap > g.max) g.max = gap
+        }
+        g.last = now
+    }
+
+    /** One line per station with the data-push intervals since the last report; resets the counters. */
+    fun gapReport(): List<String> = synchronized(gaps) {
+        gaps.map { (sn, g) ->
+            val line = if (g.count == 0) "$sn: no pushes" else "$sn: ${g.count} pushes, avg ${g.sum / g.count / 1000}s, max ${g.max / 1000}s"
+            g.count = 0
+            g.sum = 0
+            g.max = 0
+            line
+        }
+    }
+
+    /**
+     * Asks every station silent for [DeviceSnapshot.PROBE_AFTER_MS] for a snapshot.
+     * A live station answers with data; for JSON stations the cloud answers `online: 0` for an offline one.
+     */
+    fun probeSilent(now: Long = System.currentTimeMillis()) {
+        if (_conn.value != ConnState.Connected) return
+        for (device in settings.devices.value) {
+            val seen = _snapshots.value[device.sn]?.lastSeen ?: 0L
+            if (now - seen < DeviceSnapshot.PROBE_AFTER_MS) continue
+            if (now - (lastProbe[device.sn] ?: 0L) < DeviceSnapshot.PROBE_AFTER_MS) continue
+            lastProbe[device.sn] = now
+            requestQuota(device)
         }
     }
 
     /** Station reachability as the whole app sees it (screens, widget, alerts); see [stationReachable]. */
     fun reachable(sn: String, now: Long = System.currentTimeMillis()): Boolean? =
-        stationReachable(_snapshots.value[sn]?.lastSeen ?: 0L, now, cloudUpSince)
+        _snapshots.value[sn].let { stationReachable(it?.lastSeen ?: 0L, it?.offlineReportedAt ?: 0L, now, cloudUpSince) }
 
     fun state(device: Device): DeviceState =
         device.model.protocol.state(_snapshots.value[device.sn]?.params.orEmpty())

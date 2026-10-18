@@ -26,6 +26,16 @@ class JsonProtocolTest {
     }
 
     @Test
+    fun `latestQuotas reply carries the cloud's online verdict`() {
+        val online = """{"operateType":"latestQuotas","data":{"online":1,"quotaMap":{}}}"""
+        val offline = """{"operateType":"latestQuotas","data":{"online":0}}"""
+        assertEquals(true, JsonMessages.latestQuotasOnline(bytes(online)))
+        assertEquals(false, JsonMessages.latestQuotasOnline(bytes(offline)))
+        assertEquals(null, JsonMessages.latestQuotasOnline(bytes("""{"params":{"pd.soc":85}}""")))
+        assertEquals(null, JsonMessages.latestQuotasOnline(byteArrayOf(0x0A, 0x01)))
+    }
+
+    @Test
     fun `nested objects are flattened with dots and garbage is ignored`() {
         val p = JsonMessages.parse(bytes("""{"params":{"inv":{"inputWatts":10,"arr":[1,2]}}}"""))
         assertEquals(10, p["inv.inputWatts"])

@@ -47,6 +47,19 @@ object JsonMessages {
         return flatten(params)
     }
 
+    /**
+     * The cloud's own verdict carried by a latestQuotas reply (`data.online`), or null for any other message.
+     * The cloud answers this request even for a station that is offline, so the reply alone proves nothing.
+     */
+    fun latestQuotasOnline(payload: ByteArray): Boolean? {
+        if (!looksLikeJson(payload)) return null
+        val json = runCatching { JSONObject(String(payload, Charsets.UTF_8)) }.getOrNull() ?: return null
+        if (json.optString("operateType") != "latestQuotas") return null
+        val data = json.optJSONObject("data") ?: return null
+        if (!data.has("online")) return null
+        return data.optInt("online", 0) == 1
+    }
+
     fun flatten(obj: JSONObject, prefix: String = "", out: MutableMap<String, Any?> = HashMap()): MutableMap<String, Any?> {
         for (key in obj.keys()) {
             val full = if (prefix.isEmpty()) key else "$prefix.$key"
