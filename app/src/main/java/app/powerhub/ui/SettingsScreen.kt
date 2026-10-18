@@ -1,5 +1,10 @@
 package app.powerhub.ui
 
+import android.widget.Toast
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -278,9 +283,11 @@ private fun ThemeCard() {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DiagnosticsCard() {
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     var lines by remember { mutableStateOf(DiagLog.lineCount()) }
     Card {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -291,10 +298,15 @@ private fun DiagnosticsCard() {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = {
                     context.startActivity(Intent.createChooser(DiagLog.shareIntent(context), "Журнал PowerHub"))
                 }) { Text("Поділитися журналом") }
+                // The emulator shares its clipboard with the host PC, so this is the easy way out of a VM.
+                OutlinedButton(onClick = {
+                    clipboard.setText(AnnotatedString(DiagLog.read()))
+                    Toast.makeText(context, "Журнал скопійовано", Toast.LENGTH_SHORT).show()
+                }) { Text("Скопіювати") }
                 TextButton(onClick = { DiagLog.clear(); lines = 0 }) { Text("Очистити") }
             }
         }
