@@ -78,6 +78,8 @@ data class DeviceState(
     val solarW: Int? = null,
     val dcOutW: Int? = null,
     val usbOutW: Int? = null,
+    /** Power at the battery terminals, unsigned (discharge while running on battery). */
+    val batteryW: Int? = null,
     val chargeRemainMin: Int? = null,
     val dischargeRemainMin: Int? = null,
     val batteryTempC: Int? = null,
@@ -141,6 +143,19 @@ fun DeviceState.batteryFlow(): BatteryFlow {
         (soc ?: 0) >= 100 -> BatteryFlow.Full
         else -> BatteryFlow.Idle(output ?: 0)
     }
+}
+
+/**
+ * What the station spends on itself (inverter idle, electronics): power leaving the battery minus
+ * what the outputs deliver. Only while running purely on battery: with any input, charger losses
+ * mix in and the difference means nothing. Null when it can't be told.
+ */
+fun DeviceState.selfConsumptionW(): Int? {
+    if ((inputW ?: return null) > FLOW_DEADBAND_W) return null
+    val outputs = listOf(acOutW, dcOutW, usbOutW)
+    if (outputs.all { it == null }) return null
+    val source = batteryW ?: outputW ?: return null
+    return (source - outputs.sumOf { it ?: 0 }).coerceAtLeast(0)
 }
 
 /** A message ready to be published to the device's set or get topic. */

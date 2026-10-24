@@ -57,6 +57,7 @@ object DeltaPro3Protocol : DeviceProtocol {
             batteryTempC = p.int("bms_max_cell_temp"),
             acInVolt = acInVolt,
             gridConnected = p.flag("plug_in_info_ac_in_flag") ?: acInVolt?.let { it > 30 },
+            batteryW = p.absInt("pow_get_bms"),
             cycles = p.int("cycles"),
             soh = p.int("bms_batt_soh"),
         )

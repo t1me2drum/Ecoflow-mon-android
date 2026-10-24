@@ -39,6 +39,7 @@ abstract class Delta2Family : DeviceProtocol {
                 acInVolt == null && acIn == null -> null
                 else -> (acInVolt ?: 0) > 30 || (acIn ?: 0) > 0
             },
+            batteryW = p.absInt("bms_bmsStatus.outputWatts"),
             cycles = p.int("bms_bmsStatus.cycles"),
             soh = p.int("bms_bmsStatus.soh"),
         )

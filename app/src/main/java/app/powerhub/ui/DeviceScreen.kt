@@ -58,6 +58,7 @@ import app.powerhub.protocol.GridStatus
 import app.powerhub.protocol.batteryFlow
 import app.powerhub.protocol.chargingFromGrid
 import app.powerhub.protocol.gridStatus
+import app.powerhub.protocol.selfConsumptionW
 import app.powerhub.protocol.Params
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -196,6 +197,8 @@ private fun Overview(device: Device, s: DeviceState, reachable: Boolean?, lastSe
                 StatRow("AC виходи", watts(s.acOutW))
                 StatRow("DC 12V", watts(s.dcOutW))
                 StatRow("USB / Type-C", watts(s.usbOutW))
+                // Computed, not reported: shown only while the station runs on battery alone.
+                s.selfConsumptionW()?.let { StatRow("Власне споживання (інвертор)", "≈ ${watts(it)}") }
             }
         }
         Card {

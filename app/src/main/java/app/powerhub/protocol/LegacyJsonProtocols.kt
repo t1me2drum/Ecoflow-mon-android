@@ -32,6 +32,7 @@ object DeltaMaxProtocol : Delta2Family() {
                 acInVolt == null && acIn == null -> null
                 else -> (acInVolt ?: 0) > 30 || (acIn ?: 0) > 0
             },
+            batteryW = p.absInt("bmsMaster.outputWatts"),
             cycles = p.int("bmsMaster.cycles"),
             soh = p.int("bmsMaster.soh"),
         )

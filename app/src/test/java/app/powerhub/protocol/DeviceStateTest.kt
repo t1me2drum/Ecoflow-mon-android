@@ -118,4 +118,21 @@ class DeviceStateTest {
         assertEquals(DeviceModel.DELTA_3_MAX, DeviceModel.detect("XXXX0000", "DELTA 3 Max"))
         assertNull(DeviceModel.detect("ZZZZ0000", "PowerStream"))
     }
+
+    @Test
+    fun `self consumption is battery draw minus what the outputs deliver`() {
+        // AC on, nothing plugged in: the battery still feeds the idle inverter.
+        val idle = DeviceState(inputW = 0, outputW = 16, acOutW = 0, dcOutW = 0, usbOutW = 0, batteryW = 18)
+        assertEquals(18, idle.selfConsumptionW())
+        // Without a battery reading the reported output sum is the source.
+        assertEquals(16, idle.copy(batteryW = null).selfConsumptionW())
+        assertEquals(30, DeviceState(inputW = 0, acOutW = 200, usbOutW = 10, batteryW = 240).selfConsumptionW())
+    }
+
+    @Test
+    fun `self consumption is unknown while anything flows in`() {
+        assertNull(DeviceState(inputW = 300, acOutW = 0, batteryW = 280).selfConsumptionW())
+        assertNull(DeviceState(inputW = 0, batteryW = 20).selfConsumptionW())
+        assertEquals(0, DeviceState(inputW = 0, acOutW = 100, batteryW = 90).selfConsumptionW())
+    }
 }
