@@ -108,7 +108,7 @@ fun DeviceScreen(sn: String, onBack: () -> Unit) {
                 )
                 1 -> Controls(device, params, online, snackbar)
                 2 -> HistoryPane(device)
-                3 -> RawData(params)
+                3 -> RawData(params, snap)
             }
         }
     }
@@ -321,8 +321,20 @@ private fun ChoiceRow(c: Control.Choice, params: Params, onSelect: (Int) -> Unit
 }
 
 @Composable
-private fun RawData(params: Params) {
+private fun RawData(params: Params, snap: app.powerhub.data.DeviceSnapshot?) {
     Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
+        // Connection facts on screen, so a status problem can be reported with a screenshot.
+        val now = System.currentTimeMillis()
+        fun ago(t: Long) = if (t <= 0) "ніколи" else "${(now - t) / 1000} с тому"
+        Text(
+            "Ознака зв'язку: ${ago(snap?.lastSeen ?: 0)}\n" +
+                "Хмара казала «офлайн»: ${ago(snap?.offlineReportedAt ?: 0)}\n" +
+                "Останнє повідомлення: ${ago(snap?.lastMessageAt ?: 0)}" +
+                (snap?.lastMessage?.takeIf { it.isNotEmpty() }?.let { " ($it)" } ?: ""),
+            fontFamily = FontFamily.Monospace,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Spacer(Modifier.height(8.dp))
         Text(
             "Сирі значення від станції (${params.size}). Корисно, щоб знайти поля, яких ще немає в інтерфейсі.",
             style = MaterialTheme.typography.bodySmall,

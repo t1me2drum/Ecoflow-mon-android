@@ -38,6 +38,9 @@ data class DeviceSnapshot(
     val lastSeen: Long = 0L,
     /** When the cloud last said the station is offline (latestQuotas reply or Developer API); 0 if never. */
     val offlineReportedAt: Long = 0L,
+    /** The latest message of any kind, for the Raw data tab: "GET_REPLY 120 B, 14 полів". */
+    val lastMessage: String = "",
+    val lastMessageAt: Long = 0L,
 ) {
     companion object {
         const val OFFLINE_AFTER_MS = 3 * 60_000L
@@ -132,7 +135,8 @@ class Repository(
         keys ?: throw EcoflowException("Ключі Developer API не задано")
         val host = credentials.load()?.apiHost ?: API_HOSTS[0].first
         val cloudDevices = openApi.listDevices(keys.accessKey, keys.secretKey, host)
-        cloudDevices.forEach { applyCloudStatus(it.sn, it.online, "Developer API") }
+        // Only "offline" is trusted from this list: it can lag, and a stale "online" would hide an outage.
+        cloudDevices.filter { !it.online }.forEach { markOfflineByCloud(it.sn, "Developer API") }
         val unsupported = ArrayList<String>()
         val supported = cloudDevices.mapNotNull { c ->
             val model = app.powerhub.protocol.DeviceModel.detect(c.sn, c.productName)
@@ -282,7 +286,7 @@ class Repository(
         val cloudOnline = if (kind == TopicKind.GET_REPLY) JsonMessages.latestQuotasOnline(payload) else null
         if (cloudOnline == false) {
             // The cloud answered on the station's behalf: it is offline, and this reply is not a sign of life.
-            applyCloudStatus(sn, false, "latestQuotas")
+            markOfflineByCloud(sn, "latestQuotas")
             return
         }
         val parsed = try {
@@ -293,23 +297,31 @@ class Repository(
             DiagLog.log("parse", "${device.model.title} $sn $kind ${payload.size} B: $head", e)
             emptyMap()
         }
+        val alive = isSignOfLife(parsed.isNotEmpty(), cloudOnline)
         _snapshots.update { all ->
             val old = all[sn] ?: DeviceSnapshot()
             val params = if (parsed.isEmpty()) old.params else old.params + parsed
-            // Any traffic from the device proves it is online, even frames we can't decode.
-            all + (sn to old.copy(params = params, lastSeen = System.currentTimeMillis()))
+            val now = System.currentTimeMillis()
+            all + (
+                sn to old.copy(
+                    params = params,
+                    lastSeen = if (alive) now else old.lastSeen,
+                    lastMessage = "$kind ${payload.size} B, полів ${parsed.size}" + (cloudOnline?.let { ", online=$it" } ?: ""),
+                    lastMessageAt = now,
+                )
+            )
         }
     }
 
-    /** An explicit online/offline verdict from the cloud; "online" counts as a sign of life. */
-    private fun applyCloudStatus(sn: String, online: Boolean, source: String) {
+    /** The cloud said the station is offline; data arriving later brings it back. */
+    private fun markOfflineByCloud(sn: String, source: String) {
         if (settings.devices.value.none { it.sn == sn }) return
         val now = System.currentTimeMillis()
         val old = _snapshots.value[sn] ?: DeviceSnapshot()
-        if (!online && old.offlineReportedAt <= old.lastSeen) DiagLog.log("status", "$sn offline ($source)")
+        if (old.offlineReportedAt <= old.lastSeen) DiagLog.log("status", "$sn offline ($source)")
         _snapshots.update { all ->
             val cur = all[sn] ?: DeviceSnapshot()
-            all + (sn to if (online) cur.copy(lastSeen = now) else cur.copy(offlineReportedAt = now))
+            all + (sn to cur.copy(offlineReportedAt = now))
         }
     }
 

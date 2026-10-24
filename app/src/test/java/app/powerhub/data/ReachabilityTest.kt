@@ -44,6 +44,14 @@ class ReachabilityTest {
     }
 
     @Test
+    fun `an empty or undecodable message is not a sign of life`() {
+        // Offline Delta 3 probed every minute: the cloud's empty answer must not keep it "online".
+        assertEquals(false, isSignOfLife(hasData = false, cloudOnline = null))
+        assertEquals(true, isSignOfLife(hasData = true, cloudOnline = null))
+        assertEquals(true, isSignOfLife(hasData = false, cloudOnline = true))
+    }
+
+    @Test
     fun `durations`() {
         assertEquals("1 хв", durationText(10_000))
         assertEquals("45 хв", durationText(45 * min))

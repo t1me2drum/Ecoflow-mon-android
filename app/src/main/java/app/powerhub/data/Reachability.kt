@@ -18,6 +18,15 @@ fun stationReachable(lastSeen: Long, offlineReportedAt: Long, now: Long, cloudUp
     return false
 }
 
+/**
+ * Whether an incoming MQTT message proves the station itself is online.
+ *
+ * Only decoded station data or the cloud's explicit `online: 1` count. The cloud answers our requests
+ * on behalf of an offline station too, so a bare or undecodable message proves nothing; a live station
+ * always sends decodable heartbeats within the offline window.
+ */
+fun isSignOfLife(hasData: Boolean, cloudOnline: Boolean?): Boolean = hasData || cloudOnline == true
+
 /** "45 хв", "2 год 5 хв", "1 д 3 год". */
 fun durationText(ms: Long): String {
     val totalMin = (ms / 60_000L).coerceAtLeast(1)
