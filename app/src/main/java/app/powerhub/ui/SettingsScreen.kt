@@ -3,8 +3,8 @@ package app.powerhub.ui
 import android.widget.Toast
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -287,7 +287,15 @@ private fun ThemeCard() {
 @Composable
 private fun DiagnosticsCard() {
     val context = LocalContext.current
-    val clipboard = LocalClipboardManager.current
+    // System "save as" picker: works without storage permissions, and in LDPlayer the Pictures
+    // folder it offers is shared with Windows (Documents\XuanZhi9\Pictures).
+    val saveLog = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val ok = runCatching {
+            context.contentResolver.openOutputStream(uri)!!.use { it.write(DiagLog.read().toByteArray()) }
+        }.isSuccess
+        Toast.makeText(context, if (ok) "Журнал збережено" else "Не вдалося зберегти", Toast.LENGTH_SHORT).show()
+    }
     var lines by remember { mutableStateOf(DiagLog.lineCount()) }
     Card {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -302,11 +310,10 @@ private fun DiagnosticsCard() {
                 Button(onClick = {
                     context.startActivity(Intent.createChooser(DiagLog.shareIntent(context), "Журнал PowerHub"))
                 }) { Text("Поділитися журналом") }
-                // The emulator shares its clipboard with the host PC, so this is the easy way out of a VM.
                 OutlinedButton(onClick = {
-                    clipboard.setText(AnnotatedString(DiagLog.read()))
-                    Toast.makeText(context, "Журнал скопійовано", Toast.LENGTH_SHORT).show()
-                }) { Text("Скопіювати") }
+                    val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date())
+                    saveLog.launch("PowerHub-log-$stamp.txt")
+                }) { Text("Зберегти у файл") }
                 TextButton(onClick = { DiagLog.clear(); lines = 0 }) { Text("Очистити") }
             }
         }
