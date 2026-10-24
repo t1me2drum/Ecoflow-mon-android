@@ -197,8 +197,8 @@ private fun Overview(device: Device, s: DeviceState, reachable: Boolean?, lastSe
                 StatRow("AC виходи", watts(s.acOutW))
                 StatRow("DC 12V", watts(s.dcOutW))
                 StatRow("USB / Type-C", watts(s.usbOutW))
-                // Computed, not reported: shown only while the station runs on battery alone.
-                s.selfConsumptionW()?.let { StatRow("Власне споживання (інвертор)", "≈ ${watts(it)}") }
+                // Computed, not reported: only meaningful while the station runs on battery alone.
+                StatRow("Споживання інвертора", s.selfConsumptionW()?.let { "≈ ${watts(it)}" } ?: "не використовується")
             }
         }
         Card {
