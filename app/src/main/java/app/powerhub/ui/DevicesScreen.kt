@@ -175,7 +175,7 @@ fun DevicesScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
                     )
                 }
             }
-            // Compact cards (~66dp + 6dp gap) so seven stations fit where six did; bottom padding keeps the last card clear of the FAB.
+            // Compact cards (~72dp + 6dp gap): exactly seven stations fit where six did (66dp showed almost eight); bottom padding keeps the last card clear of the FAB.
             LazyColumn(
                 state = listState,
                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 88.dp),
@@ -239,9 +239,9 @@ private fun DeviceCard(
             Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = { menu = true }),
             elevation = CardDefaults.cardElevation(defaultElevation = elevation),
         ) {
-            Row(Modifier.padding(start = 12.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 SocRing(
-                    state.soc, online, 52.dp, 5.dp,
+                    state.soc, online, 56.dp, 6.dp,
                     charging = state.chargingFromGrid(weakGridVolt), offlineLabel = reachable == false,
                 )
                 Column(Modifier.padding(start = 12.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
