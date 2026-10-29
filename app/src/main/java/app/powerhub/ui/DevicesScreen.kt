@@ -175,11 +175,11 @@ fun DevicesScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
                     )
                 }
             }
-            // Compact cards (~76dp) so six stations fit on one screen; bottom padding keeps the last card clear of the FAB.
+            // Compact cards (~66dp + 6dp gap) so seven stations fit where six did; bottom padding keeps the last card clear of the FAB.
             LazyColumn(
                 state = listState,
                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 88.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 items(ordered, key = { it.sn }) { d ->
                     ReorderableItem(reorderState, key = d.sn) { isDragging ->
@@ -239,15 +239,16 @@ private fun DeviceCard(
             Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = { menu = true }),
             elevation = CardDefaults.cardElevation(defaultElevation = elevation),
         ) {
-            Row(Modifier.padding(start = 12.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(start = 12.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 SocRing(
-                    state.soc, online, 56.dp, 6.dp,
+                    state.soc, online, 52.dp, 5.dp,
                     charging = state.chargingFromGrid(weakGridVolt), offlineLabel = reachable == false,
                 )
-                Column(Modifier.padding(start = 12.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Column(Modifier.padding(start = 12.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                     Row {
+                        // Same font size, tighter line (24 → 20sp): part of the room for a seventh card.
                         Text(
-                            d.name, style = MaterialTheme.typography.titleMedium,
+                            d.name, style = MaterialTheme.typography.titleMedium.copy(lineHeight = 20.sp),
                             maxLines = 1, overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false).alignByBaseline(),
                         )
@@ -309,7 +310,7 @@ private fun DeviceCard(
                     )
                 }
                 // Drag starts immediately from the handle; the rest of the card keeps tap / long-press.
-                Box(dragHandle.padding(horizontal = 8.dp, vertical = 16.dp)) {
+                Box(dragHandle.padding(horizontal = 8.dp, vertical = 12.dp)) {
                     Icon(Icons.Default.DragIndicator, "Перетягнути", tint = MaterialTheme.colorScheme.outline)
                 }
             }
